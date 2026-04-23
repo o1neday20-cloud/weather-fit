@@ -23,6 +23,7 @@ export default function Weather() {
   const [selectedDayOutfit, setSelectedDayOutfit] = useState<ClothingItemType[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 초기 데이터 로드
   useEffect(() => {
     loadWeatherData();
     Logger.log('page_view', { page: 'weather' });
@@ -30,11 +31,25 @@ export default function Weather() {
 
   const loadWeatherData = async (location?: string) => {
     setLoading(true);
-    const weather = await getCurrentWeather(location);
-    const forecast = await getWeeklyForecast(location);
-    setCurrentWeather(weather);
-    setWeeklyForecast(forecast);
-    setLoading(false);
+    try {
+      // 단기예보(현재)와 중기예보(주간)를 병렬로 호출하여 속도 개선
+      const [weather, forecast] = await Promise.all([
+        getCurrentWeather(location),
+        getWeeklyForecast(location)
+      ]);
+
+      setCurrentWeather(weather);
+      setWeeklyForecast(forecast);
+
+      // 데이터 로드 후 자동으로 오늘 날짜 선택 (추천 코디 보여주기 위함)
+      if (forecast.length > 0) {
+        handleDateSelect(forecast[0]);
+      }
+    } catch (error) {
+      console.error("데이터 로드 실패:", error);
+    } finally {
+      setLoading(false);
+    }
 
     if (location) {
       localStorage.setItem('userLocation', location);
@@ -76,7 +91,6 @@ export default function Weather() {
     };
 
     const tempPrediction = predictFeelTemperature(weatherData, userPref);
-
     const wardrobeString = localStorage.getItem('wardrobe');
     const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
@@ -91,24 +105,21 @@ export default function Weather() {
   };
 
   const getWeatherIcon = (condition: string) => {
-    switch (condition) {
-      case '맑음':
-        return <Sun className="w-6 h-6 text-yellow-500" />;
-      case '비':
-        return <CloudRain className="w-6 h-6 text-blue-500" />;
-      case '눈':
-        return <CloudSnow className="w-6 h-6 text-blue-300" />;
-      case '안개':
-        return <CloudFog className="w-6 h-6 text-gray-500" />;
-      default:
-        return <Cloud className="w-6 h-6 text-gray-400" />;
-    }
+    if (condition.includes('비')) return <CloudRain className="w-6 h-6 text-blue-500" />;
+    if (condition.includes('눈')) return <CloudSnow className="w-6 h-6 text-blue-300" />;
+    if (condition.includes('흐림') || condition.includes('구름')) return <Cloud className="w-6 h-6 text-gray-400" />;
+    if (condition.includes('안개')) return <CloudFog className="w-6 h-6 text-gray-500" />;
+    if (condition.includes('맑음')) return <Sun className="w-6 h-6 text-yellow-500" />;
+    return <Cloud className="w-6 h-6 text-gray-400" />;
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center pb-16">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-500 text-sm">기상청 데이터를 불러오는 중...</p>
+        </div>
       </div>
     );
   }
@@ -119,21 +130,21 @@ export default function Weather() {
         {/* 헤더 */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">날씨 정보</h1>
-          <p className="text-sm text-gray-600 mt-1">주간 날씨 예보 및 지역 검색</p>
+          <p className="text-sm text-gray-600 mt-1">기상청 실시간 단기 및 중기 예보</p>
         </div>
 
         {/* 현재 위치 및 검색 */}
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm">
+        <div className="bg-white rounded-xl p-4 mb-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <MapPin className="w-5 h-5 text-blue-600" />
               <span className="font-semibold text-gray-900">
-                {currentWeather?.location}
+                {currentWeather?.location || '위치 정보 없음'}
               </span>
             </div>
             <button
               onClick={() => setShowSearch(!showSearch)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-sm"
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-sm font-medium transition-colors"
             >
               <Search className="w-4 h-4" />
               지역 변경
@@ -141,21 +152,21 @@ export default function Weather() {
           </div>
 
           {showSearch && (
-            <div className="mt-4">
+            <div className="mt-4 animate-in fade-in slide-in-from-top-2">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                placeholder="지역을 검색하세요"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="동네 이름을 입력하세요 (예: 강남구)"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
               />
               {searchResults.length > 0 && (
-                <div className="mt-2 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg">
+                <div className="mt-2 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
                   {searchResults.map((location, index) => (
                     <button
                       key={index}
                       onClick={() => handleLocationSelect(location)}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 border-b last:border-b-0"
+                      className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b last:border-b-0 text-sm text-gray-700"
                     >
                       {location}
                     </button>
@@ -166,80 +177,98 @@ export default function Weather() {
           )}
         </div>
 
-        {/* 현재 날씨 */}
+        {/* 현재 날씨 카드 */}
         {currentWeather && (
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white mb-6 shadow-lg">
-            <div className="text-sm opacity-90 mb-2">오늘</div>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-6xl font-light">{currentWeather.temperature}</span>
-                  <span className="text-3xl opacity-80">°C</span>
-                </div>
-                <div className="mt-2 text-sm opacity-90">{currentWeather.condition}</div>
-              </div>
-              {getWeatherIcon(currentWeather.condition)}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl p-6 text-white mb-8 shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-10">
+              <Sun className="w-32 h-32" />
             </div>
-            <div className="flex gap-6 mt-4 pt-4 border-t border-white/20 text-sm">
-              <div>습도 {currentWeather.humidity}%</div>
-              <div>풍속 {currentWeather.windSpeed}m/s</div>
+            <div className="relative z-10">
+              <div className="text-sm font-medium opacity-80 mb-2">현재 날씨</div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-6xl font-bold tracking-tighter">{currentWeather.temperature}</span>
+                    <span className="text-2xl font-light">°C</span>
+                  </div>
+                  <div className="mt-2 text-lg font-medium">{currentWeather.condition}</div>
+                </div>
+                <div className="bg-white/20 p-3 rounded-full backdrop-blur-md">
+                  {getWeatherIcon(currentWeather.condition)}
+                </div>
+              </div>
+              <div className="flex gap-6 mt-6 pt-4 border-t border-white/20 text-sm">
+                <div className="flex flex-col">
+                  <span className="opacity-60 text-xs">습도</span>
+                  <span className="font-semibold">{currentWeather.humidity}%</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="opacity-60 text-xs">풍속</span>
+                  <span className="font-semibold">{currentWeather.windSpeed}m/s</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
-        {/* 주간 예보 */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">주간 예보</h2>
+        {/* 주간 예보 섹션 */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">주간 예보</h2>
+            <span className="text-xs text-gray-400 font-normal">*기상청 중기예보 기준</span>
+          </div>
+
           <div className="space-y-3">
-            {weeklyForecast.map((forecast, index) => (
-              <button
-                key={forecast.date}
-                onClick={() => handleDateSelect(forecast)}
-                className={`w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all ${
-                  selectedDate === forecast.date ? 'ring-2 ring-blue-500' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between">
+            {weeklyForecast.length > 0 ? (
+              weeklyForecast.map((forecast, index) => (
+                <button
+                  key={forecast.date}
+                  onClick={() => handleDateSelect(forecast)}
+                  className={`w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex items-center justify-between border ${selectedDate === forecast.date ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-100'
+                    }`}
+                >
                   <div className="flex items-center gap-4">
-                    <div className="text-center min-w-[60px]">
-                      <div className="text-sm text-gray-500">
+                    <div className="text-center min-w-[50px] border-r border-gray-100 pr-3">
+                      <div className={`text-sm font-bold ${forecast.dayOfWeek === '일' ? 'text-red-500' : forecast.dayOfWeek === '토' ? 'text-blue-500' : 'text-gray-700'}`}>
                         {index === 0 ? '오늘' : forecast.dayOfWeek}
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(forecast.date).getMonth() + 1}/{new Date(forecast.date).getDate()}
+                      <div className="text-[10px] text-gray-400">
+                        {new Date(forecast.date).getMonth() + 1}.{new Date(forecast.date).getDate()}
                       </div>
                     </div>
                     {getWeatherIcon(forecast.condition)}
                     <div className="text-left">
-                      <div className="text-sm text-gray-600">{forecast.condition}</div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        습도 {forecast.humidity}% · 풍속 {forecast.windSpeed}m/s
-                      </div>
+                      <div className="text-sm font-medium text-gray-800">{forecast.condition}</div>
+                      <div className="text-[11px] text-gray-400">습도 {forecast.humidity}%</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+
+                  <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <div className="text-sm text-gray-500">
-                        최저 <span className="font-semibold text-blue-600">{forecast.temperature.min}°</span>
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        최고 <span className="font-semibold text-red-600">{forecast.temperature.max}°</span>
-                      </div>
+                      <div className="text-xs text-gray-400">최저 <span className="text-blue-500 font-medium">{forecast.temperature.min}°</span></div>
+                      <div className="text-xs text-gray-400">최고 <span className="text-red-500 font-medium">{forecast.temperature.max}°</span></div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                    <ChevronRight className={`w-4 h-4 transition-transform ${selectedDate === forecast.date ? 'rotate-90 text-blue-500' : 'text-gray-300'}`} />
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              ))
+            ) : (
+              <div className="text-center py-10 bg-white rounded-xl border border-dashed border-gray-200">
+                <p className="text-sm text-gray-400">주간 예보 정보를 불러올 수 없습니다.</p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* 선택한 날짜의 추천 코디 */}
         {selectedDate && (
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              {selectedDate === weeklyForecast[0]?.date ? '오늘' : `${new Date(selectedDate).getMonth() + 1}월 ${new Date(selectedDate).getDate()}일`}의 추천 코디
-            </h2>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-50 animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">
+                {selectedDate === weeklyForecast[0]?.date ? '오늘' : `${new Date(selectedDate).getMonth() + 1}월 ${new Date(selectedDate).getDate()}일`} 추천 코디
+              </h2>
+              <div className="px-2 py-1 bg-blue-50 rounded text-[10px] text-blue-600 font-bold">AI RECOMMEND</div>
+            </div>
 
             {selectedDayOutfit.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -248,20 +277,22 @@ export default function Weather() {
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-6 text-center">
-                <p className="text-gray-600 mb-3">이 날씨에 맞는 옷이 옷장에 없습니다</p>
+              <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-8 text-center">
+                <p className="text-gray-500 text-sm mb-4">현재 옷장에 이 날씨에 적합한 옷이 없네요.</p>
                 <Link
                   to="/wardrobe"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-gray-900 text-white rounded-lg hover:bg-black text-sm font-medium transition-colors"
                 >
-                  옷장 관리하기
+                  옷 등록하러 가기
                 </Link>
               </div>
             )}
 
-            <div className="mt-4 bg-white rounded-lg p-3">
-              <p className="text-sm text-gray-600">
-                💡 선택한 날짜의 최고 기온을 기준으로 코디를 추천합니다.
+            <div className="mt-6 p-4 bg-blue-50/50 rounded-lg flex gap-3">
+              <span className="text-xl">💡</span>
+              <p className="text-xs text-blue-800 leading-relaxed">
+                기상청 예보 온도와 습도를 바탕으로 AI가 체감 온도를 계산했습니다.
+                <span className="font-bold"> 일교차</span>를 고려하여 겉옷을 준비하는 것을 추천드려요!
               </p>
             </div>
           </div>
