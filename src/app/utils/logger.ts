@@ -1,0 +1,266 @@
+// ================================================================
+// Logger v2 — Fluentd → Kafka → MySQL 파이프라인
+//
+// 흐름:
+//   앱 이벤트 → sendToFluentd() → Fluentd(24224)
+//             → Kafka 토픽 → Consumer → MySQL
+//
+// Fluentd 미연결 시: API 서버 직접 호출로 폴백
+// ================================================================
+
+const API_BASE      = import.meta.env.VITE_API_URL      || 'http://localhost:4000/api';
+const FLUENTD_URL   = import.meta.env.VITE_FLUENTD_URL  || 'http://localhost:24224';
+const USE_FLUENTD   = import.meta.env.VITE_USE_FLUENTD  === 'true';
+
+export type ActionType =
+  | 'page_view' | 'product_view' | 'add_to_cart' | 'purchase'
+  | 'outfit_view' | 'feedback' | 'search' | 'wardrobe_add'
+  | 'wishlist_add' | 'wishlist_remove' | 'coupon_apply';
+
+export interface LogData {
+  timestamp: string;
+  userId: string;
+  eventType: string;
+  eventData: any;
+  pageUrl: string;
+}
+
+// ── Fluentd 전송 ──────────────────────────────────────────────
+// Fluentd HTTP input: POST http://localhost:24224/{tag}
+// tag가 Kafka 토픽 이름이 됩니다 (fluent.conf의 <match> 참조)
+async function sendToFluentd(tag: string, payload: object): Promise<boolean> {
+  try {
+    const res = await fetch(`${FLUENTD_URL}/${tag}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        clientTimestamp: new Date().toISOString(),
+        pageUrl: window.location.href,
+      }),
+      signal: AbortSignal.timeout(3000),
+      keepalive: true,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ── API 직접 전송 (Fluentd 폴백) ──────────────────────────────
+async function sendToApi(endpoint: string, payload: object): Promise<void> {
+  try {
+    await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+  } catch (e) {
+    console.warn('[Logger] API 전송 실패 (무시됨):', e);
+  }
+}
+
+// ── 파이프라인 선택 전송 ──────────────────────────────────────
+// USE_FLUENTD=true  → Fluentd 우선, 실패 시 API 폴백
+// USE_FLUENTD=false → API 직접 전송 (기본)
+async function sendBehavior(payload: {
+  customer_id: string;
+  action: ActionType;
+  page_url: string;
+  item_id?: string;
+  duration?: number;
+  scroll_depth?: number;
+}) {
+  if (USE_FLUENTD) {
+    const ok = await sendToFluentd('weatherfit.behavior', payload);
+    if (ok) return;
+  }
+  // 폴백: API 서버 직접 호출 (서버가 Kafka로 포워딩)
+  await sendToApi('/logs/behavior', payload);
+}
+
+function toActionType(eventType: string): ActionType {
+  const map: Record<string, ActionType> = {
+    page_view:          'page_view',
+    product_view:       'product_view',
+    add_to_cart:        'add_to_cart',
+    purchase_completed: 'purchase',
+    outfit_generated:   'outfit_view',
+    forecast_selected:  'outfit_view',
+    feedback_submitted: 'feedback',
+    search:             'search',
+    item_added:         'wardrobe_add',
+    wishlist_add:       'wishlist_add',
+    wishlist_remove:    'wishlist_remove',
+  };
+  return map[eventType] ?? 'page_view';
+}
+
+export class Logger {
+  private static logs: LogData[] = [];
+
+  static log(eventType: string, eventData: any) {
+    const userId = this.getUserId();
+    const logEntry: LogData = {
+      timestamp: new Date().toISOString(),
+      userId, eventType, eventData,
+      pageUrl: window.location.href,
+    };
+
+    // 1) localStorage 저장
+    this.logs.push(logEntry);
+    this.saveLogs();
+
+    // 2) 파이프라인으로 전송 (Fluentd or API)
+    sendBehavior({
+      customer_id:  userId,
+      action:       toActionType(eventType),
+      page_url:     window.location.href,
+      item_id:      eventData?.productId ?? eventData?.itemId,
+      duration:     eventData?.duration,
+      scroll_depth: eventData?.scrollDepth,
+    });
+  }
+
+  // ── 구매 완료 전송 ─────────────────────────────────────────
+  static async logPurchase(items: Array<{
+    productId: string; productName: string;
+    size: string; quantity: number; price: number;
+  }>, couponId?: string, discountAmt?: number) {
+    const userId = this.getUserId();
+    for (const item of items) {
+      const purchaseId = `pur_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const payload = {
+        purchase_id: purchaseId, customer_id: userId,
+        product_id: item.productId, status: 'paid',
+        size: item.size, price: item.price * item.quantity,
+        coupon_id: couponId ?? null, discount_amt: discountAmt ?? 0,
+      };
+
+      // Fluentd → Kafka weatherfit.purchase
+      if (USE_FLUENTD) {
+        const ok = await sendToFluentd('weatherfit.purchase', payload);
+        if (ok) continue;
+      }
+      // 폴백: API 직접
+      await sendToApi('/purchase', payload);
+    }
+  }
+
+  // ── 피드백 전송 ────────────────────────────────────────────
+  static async logFeedback(data: {
+    actualTemp: number; feelsLikeTemp: number;
+    humidity: number; windSpeed: number;
+    weatherCondition: string; recommendedOutfit: string[];
+    feedback: string; regionId?: number;
+  }) {
+    const userId = this.getUserId();
+    const feedbackId = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const payload = {
+      feedback_id: feedbackId, customer_id: userId,
+      region_id: data.regionId ?? null,
+      actual_temp: data.actualTemp, feels_like_temp: data.feelsLikeTemp,
+      humidity: data.humidity, wind_speed: data.windSpeed,
+      weather_condition: data.weatherCondition,
+      recommended_outfit: data.recommendedOutfit,
+      feedback: data.feedback,
+    };
+
+    // Fluentd → Kafka weatherfit.feedback
+    if (USE_FLUENTD) {
+      const ok = await sendToFluentd('weatherfit.feedback', payload);
+      if (ok) return;
+    }
+    await sendToApi('/feedback', payload);
+  }
+
+  // ── 찜 이벤트 전송 ─────────────────────────────────────────
+  static async logWishlist(productId: string, action: 'add' | 'remove') {
+    const userId = this.getUserId();
+    const payload = { customer_id: userId, product_id: productId, action };
+
+    if (USE_FLUENTD) {
+      const ok = await sendToFluentd('weatherfit.wishlist', payload);
+      if (ok) return;
+    }
+    // wishlist는 별도 API가 처리하므로 behavior_log에만 기록
+    await sendToApi('/logs/behavior', {
+      customer_id: userId,
+      action: action === 'add' ? 'wishlist_add' : 'wishlist_remove',
+      page_url: window.location.href,
+      item_id: productId,
+    });
+  }
+
+  // ── 옷장 추가 전송 ─────────────────────────────────────────
+  static async logWardrobeAdd(item: {
+    wardrobeId: string; category: string;
+    style: string; colorId?: number; warmth: number;
+  }) {
+    const userId = this.getUserId();
+    const payload = {
+      wardrobe_id: item.wardrobeId, customer_id: userId,
+      category: item.category, style: item.style,
+      color_id: item.colorId ?? null, warmth: item.warmth,
+    };
+
+    if (USE_FLUENTD) {
+      const ok = await sendToFluentd('weatherfit.wardrobe', payload);
+      if (ok) return;
+    }
+    await sendToApi('/wardrobe', payload);
+  }
+
+  // ── customer 자동 등록 ─────────────────────────────────────
+  static async ensureCustomer() {
+    const userId = this.getUserId();
+    const userPref = JSON.parse(localStorage.getItem('userPreference') || '{}');
+    try {
+      await fetch(`${API_BASE}/customers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id:      userId,
+          cold_sensitivity: userPref.coldSensitivity ?? 0,
+          activity_level:   userPref.activityLevel   ?? 'medium',
+          preferred_style:  userPref.style           ?? 'casual',
+        }),
+      });
+    } catch (e) {
+      console.warn('[Logger] customer 등록 실패:', e);
+    }
+  }
+
+  static getUserId(): string {
+    // 로그인한 경우만 실제 userId 반환
+    const userId = localStorage.getItem('userId');
+    if (userId && !userId.startsWith('anon_') && !userId.startsWith('user_')) {
+      return userId;
+    }
+    // 비로그인 — anonId로만 로깅, userId에는 절대 저장 안 함
+    let anonId = localStorage.getItem('anonId');
+    if (!anonId) {
+      anonId = 'anon_' + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('anonId', anonId);
+    }
+    return anonId;
+  }
+
+  // 실제 로그인 여부 확인 (장바구니 등 기능 제어용)
+  static isLoggedIn(): boolean {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return false;
+    if (userId.startsWith('anon_')) return false;
+    return true;
+  }
+
+  static saveLogs() { localStorage.setItem('appLogs', JSON.stringify(this.logs)); }
+  static getLogs(): LogData[] {
+    const stored = localStorage.getItem('appLogs');
+    if (stored) this.logs = JSON.parse(stored);
+    return this.logs;
+  }
+  static clearLogs() { this.logs = []; localStorage.removeItem('appLogs'); }
+  static exportLogs(): string { return JSON.stringify(this.logs, null, 2); }
+}
