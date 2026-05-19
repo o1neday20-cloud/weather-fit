@@ -387,17 +387,17 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
   const warmthLabels = ['매우 얇음', '얇음', '보통', '두꺼움', '매우 두꺼움'];
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-md my-auto shadow-2xl">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-900">새 옷 추가</h2>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
           {/* 이미지 업로드 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">옷 사진</label>
@@ -533,7 +533,7 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
         </div>
 
         {/* 하단 버튼 */}
-        <div className="flex gap-3 px-6 pb-6">
+        <div className="flex gap-3 px-6 py-4 border-t flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -605,35 +605,49 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
     });
   };
 
+  const warmthLabels = ['매우 얇음', '얇음', '보통', '두꺼움', '매우 두꺼움'];
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b flex-shrink-0">
           <h2 className="text-lg font-bold text-gray-900">옷 정보 수정</h2>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-5">
-          {/* 이미지 */}
+        <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+          {/* 이미지 업로드 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">사진</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">옷 사진</label>
             <div
               className="relative w-full h-40 rounded-xl border-2 border-dashed border-gray-300 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
+              style={{ backgroundColor: imagePreview ? 'transparent' : formData.color + '33' }}
               onClick={() => fileInputRef.current?.click()}
             >
-              {imagePreview || imageUrl ? (
-                <img src={imagePreview || imageUrl} alt="미리보기" className="w-full h-full object-cover" />
+              {imagePreview ? (
+                <>
+                  <img src={imagePreview} alt="미리보기" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute top-2 right-2 p-1 bg-black/40 rounded-full hover:bg-black/60"
+                    onClick={(e) => { e.stopPropagation(); setImagePreview(''); }}
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                  {uploading && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <div className="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400">
                   <Camera className="w-8 h-8" />
                   <span className="text-sm">클릭해서 사진 변경</span>
-                </div>
-              )}
-              {uploading && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs">JPG, PNG, WEBP</span>
                 </div>
               )}
             </div>
@@ -643,92 +657,110 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
           {/* 이름 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">이름</label>
-            <input type="text" value={formData.name} required
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="예: 흰색 티셔츠"
+              required
             />
           </div>
 
-          {/* 카테고리 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">카테고리</label>
-            <div className="grid grid-cols-4 gap-2">
-              {[['outer','외투'],['top','상의'],['bottom','하의'],['accessory','악세사리']].map(([val, label]) => (
-                <button key={val} type="button"
-                  onClick={() => setFormData({ ...formData, category: val as any })}
-                  className={`py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    formData.category === val ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                  }`}>{label}</button>
-              ))}
+          {/* 카테고리 + 스타일 나란히 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="top">상의</option>
+                <option value="bottom">하의</option>
+                <option value="outer">외투</option>
+                <option value="accessory">악세서리</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">스타일</label>
+              <select
+                value={formData.style}
+                onChange={(e) => setFormData({ ...formData, style: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="casual">캐주얼</option>
+                <option value="formal">포멀</option>
+                <option value="sporty">스포티</option>
+                <option value="street">스트릿</option>
+                <option value="minimal">미니멀</option>
+              </select>
             </div>
           </div>
 
-          {/* 스타일 */}
+          {/* 보온성 슬라이더 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">스타일</label>
-            <div className="grid grid-cols-5 gap-2">
-              {[['casual','캐주얼'],['formal','포멀'],['sporty','스포티'],['street','스트릿'],['minimal','미니멀']].map(([val, label]) => (
-                <button key={val} type="button"
-                  onClick={() => setFormData({ ...formData, style: val as any })}
-                  className={`py-2 rounded-lg text-xs font-medium border transition-colors ${
-                    formData.style === val ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                  }`}>{label}</button>
-              ))}
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              보온성 — <span className="text-blue-600">{warmthLabels[formData.warmth - 1]}</span>
+            </label>
+            <input
+              type="range" min="1" max="5"
+              value={formData.warmth}
+              onChange={(e) => setFormData({ ...formData, warmth: parseInt(e.target.value) })}
+              className="w-full accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+              <span>얇음</span><span>두꺼움</span>
             </div>
           </div>
 
-          {/* 색상 */}
+          {/* 색상 팔레트 */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-medium text-gray-700">색상</label>
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full border-2 border-white shadow" style={{ backgroundColor: formData.color }} />
-                <span className="text-xs text-gray-500">{PRESET_COLORS.find(c => c.hex === formData.color)?.label || '커스텀'}</span>
+                <div className="w-6 h-6 rounded-full border-2 border-white shadow-md" style={{ backgroundColor: formData.color }} />
+                <span className="text-xs text-gray-500">
+                  {PRESET_COLORS.find(c => c.hex === formData.color)?.label || '커스텀'}
+                </span>
               </div>
             </div>
             <div className="grid grid-cols-5 gap-2">
               {PRESET_COLORS.map(({ hex, label }) => (
-                <button key={hex} type="button" title={label}
+                <button
+                  key={hex}
+                  type="button"
                   onClick={() => setFormData({ ...formData, color: hex })}
+                  title={label}
                   className={`relative flex flex-col items-center gap-1 p-1 rounded-xl transition-all ${
                     formData.color === hex ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:scale-105'
                   }`}
                 >
                   <div className="w-10 h-10 rounded-full border border-gray-200 shadow-sm" style={{ backgroundColor: hex }} />
-                  <span className="text-[9px] text-gray-500 truncate w-full text-center">{label}</span>
+                  <span className="text-[9px] text-gray-500 leading-none text-center w-full truncate">{label}</span>
                 </button>
               ))}
             </div>
           </div>
+        </div>
 
-          {/* 보온성 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              보온성 — <span className="text-blue-600">{['매우 얇음','얇음','보통','두꺼움','매우 두꺼움'][formData.warmth - 1]}</span>
-            </label>
-            <div className="flex gap-2">
-              {[1,2,3,4,5].map(n => (
-                <button key={n} type="button"
-                  onClick={() => setFormData({ ...formData, warmth: n })}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                    formData.warmth === n ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 text-gray-600 hover:border-orange-300'
-                  }`}>{n}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* 버튼 */}
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50">
-              취소
-            </button>
-            <button type="submit" disabled={uploading}
-              className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-40">
-              수정 완료
-            </button>
-          </div>
-        </form>
+        {/* 하단 버튼 */}
+        <div className="flex gap-3 px-6 py-4 border-t flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!formData.name || uploading}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-40"
+          >
+            {uploading ? '사진 저장 중...' : '수정 완료'}
+          </button>
+        </div>
       </div>
     </div>
   );

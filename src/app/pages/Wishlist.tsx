@@ -43,20 +43,26 @@ export default function Wishlist() {
 
   const loadWishlist = async () => {
     setLoading(true);
+    const localItems = getLocalWishlist();
     const userId = localStorage.getItem('userId');
-    if (userId) {
+    if (userId && !userId.startsWith('anon_')) {
       try {
         const res = await fetch(`${API_BASE}/wishlist/${userId}`);
         if (res.ok) {
-          const data = await res.json();
-          setItems(data);
+          const apiItems: WishItem[] = await res.json();
+          // API 결과 + localStorage 병합 (중복 product_id 제거)
+          const merged = [...apiItems];
+          for (const local of localItems) {
+            const localId = (local as any).product_id || (local as any).id;
+            if (!merged.find(a => a.product_id === localId)) merged.push(local);
+          }
+          setItems(merged);
           setLoading(false);
           return;
         }
       } catch {}
     }
-    // fallback: localStorage
-    setItems(getLocalWishlist());
+    setItems(localItems);
     setLoading(false);
   };
 

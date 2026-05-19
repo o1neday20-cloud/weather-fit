@@ -20,13 +20,16 @@ const SERVICE_KEY = 'a63da1824b849facc68af62cff78ebd060ce4bc5592719ac271fefebbee
 // ─────────────────────────────────────────────
 // 1. 위치 관련
 // ─────────────────────────────────────────────
-// GPS로 현재 좌표 획득
-export async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) reject(new Error('GPS 미지원'));
+// 서울 기본 좌표 — 위치 권한 없을 때 폴백
+const SEOUL_COORDS = { lat: 37.5665, lon: 126.9780 };
+
+// GPS로 현재 좌표 획득 — 권한 거부/미지원 시 서울로 폴백
+export async function getCurrentCoords(): Promise<{ lat: number; lon: number; isDefault?: boolean }> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve({ ...SEOUL_COORDS, isDefault: true }); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => reject(new Error('위치 권한 거부'))
+      () => resolve({ ...SEOUL_COORDS, isDefault: true })
     );
   });
 }
@@ -121,7 +124,7 @@ export async function getCurrentWeather(location?: string): Promise<WeatherData>
     } else {
       const coords = await getCurrentCoords();
       lat = coords.lat; lon = coords.lon;
-      locationName = await coordsToLocationName(lat, lon);
+      locationName = coords.isDefault ? '서울 기준 날씨' : await coordsToLocationName(lat, lon);
     }
     const grid = convertToGrid(lat, lon);
     const { baseDate, baseTime } = getShortBaseDateTime();
@@ -133,12 +136,11 @@ export async function getCurrentWeather(location?: string): Promise<WeatherData>
     const current = items.filter((i) => i.fcstTime === fcstTime);
     const getVal = (cat: string) => current.find((i: any) => i.category === cat)?.fcstValue ?? '0';
     const weatherResult = { temperature: Number(getVal('TMP')), humidity: Number(getVal('REH')), windSpeed: Number(getVal('WSD')), condition: parseCondition(getVal('SKY'), getVal('PTY')), location: locationName, date: new Date().toISOString() };
-    // Feedback.tsx에서 참조할 수 있도록 마지막 날씨 저장
     localStorage.setItem('lastWeather', JSON.stringify(weatherResult));
     return weatherResult;
   } catch (e) {
     console.error('현재 날씨 에러:', e);
-    return { temperature: 20, humidity: 50, windSpeed: 2, condition: '맑음', location: location || '서울' };
+    return { temperature: 20, humidity: 50, windSpeed: 2, condition: '맑음', location: location || '서울 기준 날씨' };
   }
 }
 // ─────────────────────────────────────────────
@@ -211,7 +213,8 @@ export async function getWeeklyForecast(location?: string): Promise<WeeklyForeca
       lat = result.lat; lon = result.lon; locationName = result.name;
     } else {
       const coords = await getCurrentCoords();
-      lat = coords.lat; lon = coords.lon; locationName = await coordsToLocationName(lat, lon);
+      lat = coords.lat; lon = coords.lon;
+      locationName = coords.isDefault ? '서울 기준 날씨' : await coordsToLocationName(lat, lon);
     }
     const [shortFc, midFc] = await Promise.all([getShortForecast(lat, lon), getMidForecast(locationName)]);
     const shortDates = new Set(shortFc.map((f) => f.date));

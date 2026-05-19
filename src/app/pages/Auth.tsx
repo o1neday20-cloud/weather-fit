@@ -243,6 +243,10 @@ export default function Auth() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
+    if (!regForm.name.trim())       { setError('이름을 입력해주세요'); return; }
+    if (!regForm.birth_date)        { setError('생년월일을 입력해주세요'); return; }
+    if (!regForm.phone.trim())      { setError('전화번호를 입력해주세요'); return; }
+    if (regForm.gender === 'N')     { setError('성별을 선택해주세요'); return; }
     if (regForm.password !== regForm.passwordConfirm) { setError('비밀번호가 일치하지 않습니다'); return; }
     if (!regForm.agree_terms || !regForm.agree_privacy) { setError('필수 약관에 동의해주세요'); return; }
     if (emailChecked !== true) { setError('이메일 중복 확인을 해주세요'); return; }
@@ -340,14 +344,14 @@ export default function Auth() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">이름</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
                   <input type="text" value={regForm.name}
                     onChange={e => setRegForm({...regForm, name: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     placeholder="홍길동" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">생년월일</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">생년월일 <span className="text-red-500">*</span></label>
                   <input type="date" value={regForm.birth_date}
                     onChange={e => setRegForm({...regForm, birth_date: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
@@ -378,20 +382,20 @@ export default function Auth() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">전화번호</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">전화번호 <span className="text-red-500">*</span></label>
                 <input type="tel" value={regForm.phone}
                   onChange={e => setRegForm({...regForm, phone: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  placeholder="010-0000-0000" />
+                  placeholder="01000000000" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">성별</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">성별 <span className="text-red-500">*</span></label>
                   <select value={regForm.gender}
                     onChange={e => setRegForm({...regForm, gender: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                    <option value="N">선택 안함</option>
+                    <option value="N">선택해주세요</option>
                     <option value="M">남성</option>
                     <option value="F">여성</option>
                   </select>

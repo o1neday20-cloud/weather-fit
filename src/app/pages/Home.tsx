@@ -6,6 +6,7 @@ import ClothingItem from '../components/ClothingItem';
 import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
 import { Logger } from '../utils/logger';
+import { wardrobeKey } from '../utils/storage';
 import { Sparkles, TrendingUp, Settings } from 'lucide-react';
 
 export default function Home() {
@@ -37,7 +38,7 @@ export default function Home() {
     setFeelTemp(tempPrediction.perceived);
 
     // 옷장 데이터 가져오기
-    const wardrobeString = localStorage.getItem('wardrobe');
+    const wardrobeString = localStorage.getItem(wardrobeKey());
     const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
     // 코디 추천
