@@ -86,6 +86,20 @@ export default function Wardrobe() {
     localStorage.setItem(wardrobeKey(), JSON.stringify(updated));
     Logger.log('item_added', { itemName: item.name, category: item.category });
     setShowAddModal(false);
+
+    // 백엔드 동기화 (실패해도 localStorage는 이미 저장됨)
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    fetch(`${API_BASE}/wardrobe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: item.id,
+        customer_id: localStorage.getItem('userId'),
+        category: item.category,
+        style: item.style,
+        warmth: item.warmth,
+      }),
+    }).catch(() => {});
   };
 
   return (
