@@ -344,9 +344,9 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+  const SERVER_ORIGIN = API_BASE.replace(/\/api$/, '');
 
-                  // 파일 선택 → 미리보기 표시 + 서버 업로드
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -356,17 +356,17 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
       const base64 = ev.target?.result as string;
       setImagePreview(base64);
       setUploading(true);
-      // 서버 업로드
       try {
         const form = new FormData();
         form.append('image', file);
         const res = await fetch(`${API_BASE}/upload/wardrobe`, { method: 'POST', body: form });
         if (res.ok) {
           const data = await res.json();
-          setImageUrl(data.imageUrl);
+          const url: string = data.imageUrl;
+          setImageUrl(url.startsWith('http') ? url : `${SERVER_ORIGIN}${url}`);
         }
       } catch {
-        console.warn('이미지 서버 업로드 실패 — 미리보기만 저장됨');
+        // 업로드 실패 시 base64 미리보기로 저장됨
       } finally {
         setUploading(false);
       }
@@ -575,7 +575,8 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
   const [imageUrl,     setImageUrl]     = useState<string>(item.image || '');
   const [uploading,    setUploading]    = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+  const SERVER_ORIGIN = API_BASE.replace(/\/api$/, '');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -586,11 +587,19 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
       setImagePreview(base64);
       setUploading(true);
       try {
-        const form = new FormData(); form.append('image', file);
+        const form = new FormData();
+        form.append('image', file);
         const res = await fetch(`${API_BASE}/upload/wardrobe`, { method: 'POST', body: form });
-        if (res.ok) { const data = await res.json(); setImageUrl(data.imageUrl); }
-      } catch {}
-      setUploading(false);
+        if (res.ok) {
+          const data = await res.json();
+          const url: string = data.imageUrl;
+          setImageUrl(url.startsWith('http') ? url : `${SERVER_ORIGIN}${url}`);
+        }
+      } catch {
+        // 업로드 실패 시 base64 미리보기로 저장됨
+      } finally {
+        setUploading(false);
+      }
     };
     reader.readAsDataURL(file);
   };
