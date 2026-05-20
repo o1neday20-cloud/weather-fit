@@ -475,6 +475,14 @@ app.post('/api/purchase', async (req, res) => {
           [purchase_id, customer_id, product_id, status || 'paid', size || null, price, coupon_id || null, discount_amt || 0]
         );
       }
+      // PURCHASE 이벤트 → Fluentd
+      sendToFluentd({
+        event_type: 'PURCHASE',
+        customer_id, product_id, size, price,
+        coupon_id: coupon_id || null,
+        discount_amt: discount_amt || 0,
+        timestamp: new Date().toISOString(),
+      });
     } else {
       // 장바구니/위시리스트 → 직접 DB
       if ((status || 'cart') === 'cart') {
