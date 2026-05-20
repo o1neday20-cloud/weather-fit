@@ -357,6 +357,13 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 app.post('/api/wishlist', async (req, res) => {
   const { customer_id, product_id } = req.body;
   try {
+    // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
+    const [productCheck] = await pool.execute(
+      'SELECT product_id FROM product WHERE product_id = ?', [product_id]
+    );
+    if (!productCheck.length) {
+      return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
+    }
     const [exist] = await pool.execute(
       `SELECT purchase_id FROM purchase WHERE customer_id=? AND product_id=? AND status='wishlist'`,
       [customer_id, product_id]
@@ -447,6 +454,14 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
 app.post('/api/purchase', async (req, res) => {
   const { purchase_id, customer_id, product_id, size, price, status, coupon_id, discount_amt } = req.body;
   try {
+    // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
+    const [productCheck] = await pool.execute(
+      'SELECT product_id FROM product WHERE product_id = ?', [product_id]
+    );
+    if (!productCheck.length) {
+      return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
+    }
+
     if ((status || 'cart') === 'paid') {
       // 구매 완료 → Kafka weatherfit.purchase 토픽
       const sent = await sendToKafka('weatherfit.purchase', {

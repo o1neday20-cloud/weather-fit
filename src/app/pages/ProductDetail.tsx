@@ -114,44 +114,62 @@ export default function ProductDetail() {
 
   useEffect(() => {
     const enterTime = Date.now();
+    if (!id) return;
 
-    if (id) {
-      const found = getProductById(id);
-      if (found) {
-        setProduct(found);
-        setSelectedSize(found.sizes[0]);
-        setSelectedColor(found.colors?.[0] || { name: '', hex: found.color });
-        // 찜 상태 초기화
-        const stored: any[] = JSON.parse(localStorage.getItem(wishlistKey()) || '[]');
-        setIsWished(stored.some((i: any) => (i.product_id || i.id) === found.id));
-        Logger.log('product_view', { productId: id, productName: found.name });
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    const local = getProductById(id);
 
-        // GA4 상품 조회 이벤트
-        if ((window as any).gtag) {
-          (window as any).gtag('event', 'view_item', {
-            currency: 'KRW',
-            value: found.price,
-            items: [{ item_id: found.id, item_name: found.name, price: found.price }],
-          });
-        }
-        // 페이스북 픽셀 ViewContent 이벤트
-        if ((window as any).fbq) {
-          (window as any).fbq('track', 'ViewContent', {
-            content_ids: [found.id],
-            content_name: found.name,
-            value: found.price,
-            currency: 'KRW',
-          });
-        }
+    // 상품 초기화 공통 처리
+    const initProduct = (p: Product) => {
+      setProduct(p);
+      setSelectedSize(p.sizes[0]);
+      setSelectedColor(p.colors?.[0] || { name: '', hex: p.color });
+      const stored: any[] = JSON.parse(localStorage.getItem(wishlistKey()) || '[]');
+      setIsWished(stored.some((i: any) => (i.product_id || i.id) === p.id));
+      Logger.log('product_view', { productId: id, productName: p.name });
+      if ((window as any).gtag) {
+        (window as any).gtag('event', 'view_item', {
+          currency: 'KRW', value: p.price,
+          items: [{ item_id: p.id, item_name: p.name, price: p.price }],
+        });
       }
-    }
+      if ((window as any).fbq) {
+        (window as any).fbq('track', 'ViewContent', {
+          content_ids: [p.id], content_name: p.name, value: p.price, currency: 'KRW',
+        });
+      }
+    };
 
-    // 페이지 이탈 시 체류시간 전송 (사용자 행동 분석용)
+    // 백엔드 호출 → VIEW 이벤트 Fluentd 전송 + 상품 데이터 사용
+    // 실패 시 로컬 데이터로 폴백
+    fetch(`${API_BASE}/products/${id}`)
+      .then(res => { if (!res.ok) throw new Error('not ok'); return res.json(); })
+      .then(data => {
+        const merged: Product = {
+          id: data.product_id,
+          name: data.name,
+          brand: data.brand,
+          category: data.category,
+          warmth: data.warmth,
+          color: data.hex_code || local?.color || '#888888',
+          style: local?.style || 'casual',
+          price: Number(data.price),
+          description: local?.description || '',
+          sizes: local?.sizes || ['S', 'M', 'L', 'XL'],
+          colors: local?.colors || [{ name: data.color_name || '기본', hex: data.hex_code || '#888888' }],
+          inStock: data.in_stock === 1,
+          imageUrl: data.image_url || local?.imageUrl,
+          isOwned: false,
+        };
+        initProduct(merged);
+      })
+      .catch(() => {
+        if (local) initProduct(local);
+      });
+
     return () => {
       const duration = Math.round((Date.now() - enterTime) / 1000);
-      if (id && duration > 1) {
-        Logger.log('product_view', { productId: id, duration });
-      }
+      if (duration > 1) Logger.log('product_view', { productId: id, duration });
     };
   }, [id]);
 
