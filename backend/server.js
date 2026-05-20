@@ -524,22 +524,36 @@ app.post('/api/feedback', async (req, res) => {
           humidity, wind_speed, weather_condition, recommended_outfit, feedback } = req.body;
   try {
     const fid = feedback_id || `fb_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+
+    // customer_id FK 검증 — 익명(anon_xxx) 또는 DB에 없는 경우 NULL로 처리
+    let safeCustomerId = null;
+    if (customer_id) {
+      const [custCheck] = await pool.execute(
+        'SELECT customer_id FROM customer WHERE customer_id = ?', [customer_id]
+      );
+      if (custCheck.length) safeCustomerId = customer_id;
+    }
+
+    // feedback 값 유효성 보장 — ENUM 범위 외 값 유입 방지
+    const VALID_FEEDBACK = ['너무추움', '춥다', '적당', '덥다', '너무더움'];
+    const safeFeedback = VALID_FEEDBACK.includes(feedback) ? feedback : '적당';
+
     await pool.execute(
       `INSERT INTO temperature_feedback
          (feedback_id, customer_id, region_id, actual_temp, feels_like_temp,
           humidity, wind_speed, weather_condition, recommended_outfit, feedback, feedback_date)
        VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_DATE)`,
-      [fid, customer_id, region_id ?? null, actual_temp, feels_like_temp,
-       humidity, wind_speed, weather_condition, JSON.stringify(recommended_outfit ?? []), feedback]
+      [fid, safeCustomerId, region_id ?? null, actual_temp, feels_like_temp,
+       humidity, wind_speed, weather_condition, JSON.stringify(recommended_outfit ?? []), safeFeedback]
     );
     // FEEDBACK 이벤트 → Fluentd
     sendToFluentd({
       event_type: 'FEEDBACK',
-      customer_id,
+      customer_id: safeCustomerId,
       actual_temp, feels_like_temp,
       humidity, wind_speed,
       weather_condition,
-      feedback,
+      feedback: safeFeedback,
       feedback_date: new Date().toISOString().split('T')[0],
       timestamp: new Date().toISOString(),
     });
