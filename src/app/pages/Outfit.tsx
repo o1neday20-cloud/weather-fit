@@ -25,39 +25,56 @@ export default function Outfit() {
 
   const loadRecommendations = async (seed: number) => {
     setLoading(true);
+    try {
+      // 날씨 API: 3초 내 응답 없으면 캐시 또는 기본값으로 폴백
+      const cachedWeather = localStorage.getItem('lastWeather');
+      const fallbackWeather: WeatherData = cachedWeather
+        ? JSON.parse(cachedWeather)
+        : { temperature: 20, humidity: 50, windSpeed: 2, condition: '맑음', location: '서울 기준 날씨' };
 
-    const weatherData = await getCurrentWeather();
-    setWeather(weatherData);
+      let weatherData: WeatherData;
+      try {
+        weatherData = await Promise.race([
+          getCurrentWeather(),
+          new Promise<WeatherData>((_, reject) =>
+            setTimeout(() => reject(new Error('weather_timeout')), 3000)
+          ),
+        ]);
+      } catch {
+        weatherData = fallbackWeather;
+      }
+      setWeather(weatherData);
 
-    const userPrefString = localStorage.getItem('userPreference');
-    const userPref: UserPreference = userPrefString
-      ? JSON.parse(userPrefString)
-      : { coldSensitivity: 0, activityLevel: 'medium', style: 'casual' };
+      const userPrefString = localStorage.getItem('userPreference');
+      const userPref: UserPreference = userPrefString
+        ? JSON.parse(userPrefString)
+        : { coldSensitivity: 0, activityLevel: 'medium', style: 'casual' };
 
-    const tempPrediction = predictFeelTemperature(weatherData, userPref);
-    setFeelTemp(tempPrediction.perceived);
+      const tempPrediction = predictFeelTemperature(weatherData, userPref);
+      setFeelTemp(tempPrediction.perceived);
 
-    const wardrobeString = localStorage.getItem(wardrobeKey());
-    const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
+      // wardrobeKey()로 옷장 데이터 읽기
+      const wardrobeString = localStorage.getItem(wardrobeKey());
+      const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
-    const outfit = recommendOutfit(tempPrediction.perceived, wardrobe, seed);
-    setRecommendedOutfit(outfit);
+      const outfit = recommendOutfit(tempPrediction.perceived, wardrobe, seed);
+      setRecommendedOutfit(outfit);
 
-    // 내 옷장에 있는 옷 ID 수집
-    const ownedIds = wardrobe.map(item => item.id);
+      const ownedIds = wardrobe.map(item => item.id);
+      const suggestions = getRecommendedProducts(tempPrediction.perceived, ownedIds);
+      setPurchaseSuggestions(suggestions);
 
-    // 쇼핑몰에서 추천 상품 가져오기
-    const suggestions = getRecommendedProducts(tempPrediction.perceived, ownedIds);
-    setPurchaseSuggestions(suggestions);
-
-    Logger.log('outfit_generated', {
-      feelTemperature: tempPrediction.perceived,
-      outfitCount: outfit.length,
-      suggestionsCount: suggestions.length,
-      location: weatherData.location
-    });
-
-    setLoading(false);
+      Logger.log('outfit_generated', {
+        feelTemperature: tempPrediction.perceived,
+        outfitCount: outfit.length,
+        suggestionsCount: suggestions.length,
+        location: weatherData.location,
+      });
+    } catch (e) {
+      console.error('[Outfit] 로딩 오류:', e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {

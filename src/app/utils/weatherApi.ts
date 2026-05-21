@@ -29,7 +29,8 @@ export async function getCurrentCoords(): Promise<{ lat: number; lon: number; is
     if (!navigator.geolocation) { resolve({ ...SEOUL_COORDS, isDefault: true }); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => resolve({ ...SEOUL_COORDS, isDefault: true })
+      () => resolve({ ...SEOUL_COORDS, isDefault: true }),
+      { timeout: 5000, maximumAge: 60000 }
     );
   });
 }
@@ -129,7 +130,7 @@ export async function getCurrentWeather(location?: string): Promise<WeatherData>
     const grid = convertToGrid(lat, lon);
     const { baseDate, baseTime } = getShortBaseDateTime();
     const params = new URLSearchParams({ serviceKey: SERVICE_KEY, numOfRows: '100', pageNo: '1', dataType: 'JSON', base_date: baseDate, base_time: baseTime, nx: String(grid.x), ny: String(grid.y) });
-    const res = await fetch(`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?${params}`);
+    const res = await fetch(`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?${params}`, { signal: AbortSignal.timeout(5000) });
     const json = await res.json();
     const items: any[] = json.response.body.items.item;
     const fcstTime = items[0]?.fcstTime;

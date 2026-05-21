@@ -14,6 +14,12 @@ export function wardrobeKey(): string {
   return 'wardrobe_guest';
 }
 
+export function deletedWardrobeKey(): string {
+  const userId = localStorage.getItem('userId');
+  if (userId && !userId.startsWith('anon_')) return `deletedWardrobe_${userId}`;
+  return 'deletedWardrobe_guest';
+}
+
 export function cartKey(): string {
   return `cart_${getUserId()}`;
 }

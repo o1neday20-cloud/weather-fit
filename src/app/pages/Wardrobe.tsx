@@ -3,7 +3,7 @@ import Navigation from '../components/Navigation';
 import ClothingItem from '../components/ClothingItem';
 import { ClothingItem as ClothingItemType } from '../utils/aiModel';
 import { Logger } from '../utils/logger';
-import { wardrobeKey } from '../utils/storage';
+import { wardrobeKey, deletedWardrobeKey } from '../utils/storage';
 
 // 사람들이 많이 입는 옷 색상 20가지
 const PRESET_COLORS = [
@@ -28,10 +28,16 @@ const PRESET_COLORS = [
   { hex: '#E17055', label: '오렌지' },
   { hex: '#6C5CE7', label: '퍼플' },
 ];
-import { Plus, Shirt, Upload, X, Camera } from 'lucide-react';
+import { Plus, Shirt, Upload, X, Camera, Trash2, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+
+interface DeletedItem extends ClothingItemType {
+  deletedAt: string;
+}
 
 export default function Wardrobe() {
   const [wardrobe, setWardrobe] = useState<ClothingItemType[]>([]);
+  const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<ClothingItemType | null>(null);
 
@@ -55,13 +61,53 @@ export default function Wardrobe() {
       setWardrobe([]);
       localStorage.setItem(wardrobeKey(), JSON.stringify([]));
     }
+    // 삭제된 아이템 로드
+    const deletedStr = localStorage.getItem(deletedWardrobeKey());
+    setDeletedItems(deletedStr ? JSON.parse(deletedStr) : []);
   };
 
   const handleDelete = (id: string) => {
-    const updated = wardrobe.filter(item => item.id !== id);
+    const item = wardrobe.find(i => i.id === id);
+    if (!item) return;
+
+    // 소프트 삭제: 삭제 목록에 보관
+    const deletedItem: DeletedItem = { ...item, deletedAt: new Date().toISOString() };
+    const updatedDeleted = [deletedItem, ...deletedItems].slice(0, 30); // 최대 30개 보관
+    setDeletedItems(updatedDeleted);
+    localStorage.setItem(deletedWardrobeKey(), JSON.stringify(updatedDeleted));
+
+    // 옷장에서 제거
+    const updated = wardrobe.filter(i => i.id !== id);
     setWardrobe(updated);
     localStorage.setItem(wardrobeKey(), JSON.stringify(updated));
     Logger.log('item_deleted', { itemId: id });
+
+    // 백엔드 삭제 API 호출
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const qp = partnerCustomerId ? `?partnerCustomerId=${partnerCustomerId}` : '';
+    fetch(`${API_BASE}/wardrobe/${id}${qp}`, { method: 'DELETE', signal: AbortSignal.timeout(3000) }).catch(() => {});
+  };
+
+  const handleRestore = (deletedItem: DeletedItem) => {
+    // 옷장으로 복구
+    const restored: ClothingItemType = { ...deletedItem };
+    delete (restored as any).deletedAt;
+    const updatedWardrobe = [...wardrobe, restored];
+    setWardrobe(updatedWardrobe);
+    localStorage.setItem(wardrobeKey(), JSON.stringify(updatedWardrobe));
+
+    // 삭제 목록에서 제거
+    const updatedDeleted = deletedItems.filter(i => i.id !== deletedItem.id);
+    setDeletedItems(updatedDeleted);
+    localStorage.setItem(deletedWardrobeKey(), JSON.stringify(updatedDeleted));
+    Logger.log('item_restored', { itemId: deletedItem.id });
+  };
+
+  const handlePermanentDelete = (id: string) => {
+    const updatedDeleted = deletedItems.filter(i => i.id !== id);
+    setDeletedItems(updatedDeleted);
+    localStorage.setItem(deletedWardrobeKey(), JSON.stringify(updatedDeleted));
   };
 
   const handleEdit = (item: ClothingItemType) => {
@@ -165,11 +211,69 @@ export default function Wardrobe() {
             </button>
           </div>
         )}
+
+        {/* 휴지통 (삭제된 옷 복구) */}
+        {deletedItems.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowTrash(v => !v)}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors mb-3"
+            >
+              <Trash2 className="w-4 h-4" />
+              삭제된 옷 ({deletedItems.length}개)
+              {showTrash ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {showTrash && (
+              <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-4">
+                <p className="text-xs text-gray-400 mb-3">삭제된 옷은 여기서 복구할 수 있어요. 최대 30개 보관됩니다.</p>
+                <div className="space-y-2">
+                  {deletedItems.map(item => (
+                    <div key={item.id + item.deletedAt} className="bg-white rounded-lg p-3 flex items-center gap-3 shadow-sm">
+                      <div
+                        className="w-12 h-12 rounded-lg flex-shrink-0 overflow-hidden"
+                        style={{ backgroundColor: item.color || '#e5e7eb' }}
+                      >
+                        {item.image ? (
+                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xl opacity-40">👕</div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate">{item.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {item.category} · {new Date(item.deletedAt).toLocaleDateString('ko-KR')} 삭제
+                        </p>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleRestore(item)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 text-blue-600 text-xs rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          복구
+                        </button>
+                        <button
+                          onClick={() => handlePermanentDelete(item.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 text-red-500 text-xs rounded-lg hover:bg-red-100 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                          영구삭제
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 추가 모달 */}
       {showAddModal && (
-        <AddItemModal 
+        <AddItemModal
           onClose={() => setShowAddModal(false)}
           onAdd={handleAdd}
         />

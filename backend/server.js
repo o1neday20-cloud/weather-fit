@@ -439,7 +439,16 @@ app.post('/api/wardrobe', async (req, res) => {
 
 app.delete('/api/wardrobe/:wardrobeId', async (req, res) => {
   try {
-    await pool.execute('DELETE FROM wardrobe_item WHERE item_id = ?', [req.params.wardrobeId]);
+    const { wardrobeId } = req.params;
+    const partnerCustomerId = req.query.partnerCustomerId;
+    await pool.execute('DELETE FROM wardrobe_item WHERE item_id = ?', [wardrobeId]);
+    // WARDROBE_DELETE 이벤트 → Fluentd
+    sendToFluentd({
+      event_type: 'WARDROBE_DELETE',
+      customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+      item_id: wardrobeId,
+      timestamp: new Date().toISOString(),
+    });
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '아이템 삭제 실패' }); }
 });

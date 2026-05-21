@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
 import Navigation from '../components/Navigation';
 import { Logger } from '../utils/logger';
-import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag } from 'lucide-react';
+import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag, Package } from 'lucide-react';
 import { getMembershipInfo } from '../utils/membership';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
@@ -21,6 +21,8 @@ export default function MyPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [membershipLevel, setMembershipLevel] = useState<string>('BASIC');
+  const [purchaseHistory, setPurchaseHistory] = useState<any[]>([]);
+  const [showAllPurchases, setShowAllPurchases] = useState(false);
   const [prefs, setPrefs] = useState({
     cold_sensitivity: 0,
     activity_level: 'medium',
@@ -56,6 +58,9 @@ export default function MyPage() {
     } else {
       setIsLoggedIn(false);
     }
+    // 구매 내역 로드 (Checkout.tsx에서 저장)
+    const history: any[] = JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
+    setPurchaseHistory(history.slice().reverse()); // 최신순
     Logger.log('page_view', { page: 'mypage' });
   }, []);
 
@@ -196,6 +201,58 @@ export default function MyPage() {
             </Link>
           )}
         </div>
+
+        {/* 구매 내역 — 로그인된 경우만 */}
+        {isLoggedIn && purchaseHistory.length > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-blue-500" />
+                <h3 className="font-semibold text-gray-900">구매 내역</h3>
+              </div>
+              <span className="text-xs text-gray-400">총 {purchaseHistory.length}건</span>
+            </div>
+            <div className="space-y-0 divide-y divide-gray-100">
+              {(showAllPurchases ? purchaseHistory : purchaseHistory.slice(0, 5)).map((item, i) => (
+                <div key={i} className="flex items-center gap-3 py-3">
+                  {/* 썸네일 */}
+                  <div
+                    className="w-12 h-12 rounded-lg flex-shrink-0 overflow-hidden bg-gray-100"
+                    style={{ backgroundColor: item.color || '#f3f4f6' }}
+                  >
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-lg opacity-40">👕</div>
+                    )}
+                  </div>
+                  {/* 정보 */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.productName}</p>
+                    <p className="text-xs text-gray-400">
+                      {item.size && `${item.size} · `}
+                      {item.quantity > 1 && `${item.quantity}개 · `}
+                      {new Date(item.purchasedAt).toLocaleDateString('ko-KR')}
+                    </p>
+                  </div>
+                  {/* 금액 */}
+                  <div className="text-sm font-bold text-gray-900 flex-shrink-0">
+                    {item.price.toLocaleString()}원
+                  </div>
+                </div>
+              ))}
+            </div>
+            {purchaseHistory.length > 5 && (
+              <button
+                onClick={() => setShowAllPurchases(v => !v)}
+                className="mt-3 w-full text-xs text-blue-600 hover:text-blue-700 py-2 border border-blue-100 rounded-xl hover:bg-blue-50 transition-colors"
+              >
+                {showAllPurchases ? '접기' : `더보기 (${purchaseHistory.length - 5}건 더)`}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 개인 설정 — 로그인된 경우만 */}
         {isLoggedIn && (

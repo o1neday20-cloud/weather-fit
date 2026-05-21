@@ -95,7 +95,7 @@ export default function Checkout() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 500));
     if (addToWardrobe) {
       const wardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
       cartItems.forEach(item => {
@@ -125,10 +125,11 @@ export default function Checkout() {
       items: cartItems.map(item => ({ productId: item.product.id, productName: item.product.name, quantity: item.quantity, price: item.product.price })),
       totalPrice: getTotalPrice(), couponUsed: couponInfo?.coupon_id, discountAmt: couponInfo?.discountAmt || 0, finalPrice: getFinalPrice(), addToWardrobe,
     });
-    await (Logger as any).logPurchase(
+    // logPurchase는 fire-and-forget (실패해도 결제 완료 처리)
+    (Logger as any).logPurchase(
       cartItems.map(item => ({ productId: item.product.id, productName: item.product.name, size: item.size, quantity: item.quantity, price: item.product.price })),
       couponInfo?.coupon_id, couponInfo?.discountAmt,
-    );
+    ).catch(() => {});
 
     // ── WARDROBE 이벤트 전송 (구매 상품 → 옷장 API) ───────────────
     const userId = localStorage.getItem('userId');
@@ -155,9 +156,27 @@ export default function Checkout() {
           color_id: colorId,
           partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
         }),
+        signal: AbortSignal.timeout(3000),
         keepalive: true,
       }).catch(() => {});
     }
+
+    // ── 구매 내역 localStorage 저장 (MyPage 표시용) ───────────────
+    const purchaseHistory: any[] = JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
+    cartItems.forEach(item => {
+      purchaseHistory.push({
+        productId: item.product.id,
+        productName: item.product.name,
+        brand: item.product.brand,
+        price: item.product.price * item.quantity,
+        size: item.size,
+        quantity: item.quantity,
+        imageUrl: item.product.imageUrl,
+        color: item.selectedColor?.hex || item.product.color,
+        purchasedAt: new Date().toISOString(),
+      });
+    });
+    localStorage.setItem('purchaseHistory', JSON.stringify(purchaseHistory));
 
     // 구매한 아이템만 장바구니에서 제거 (선택 구매 지원)
     const purchasedKeys = new Set(cartItems.map(item => `${item.product.id}__${item.size}`));
