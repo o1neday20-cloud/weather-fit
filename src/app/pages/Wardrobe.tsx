@@ -350,7 +350,7 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
     name: '',
     category: 'top' as ClothingItemType['category'],
     warmth: 3,
-    color: '#95A5A6',
+    color: '#8C8C8C',
     style: 'casual' as ClothingItemType['style'],
   });
   const [imagePreview, setImagePreview] = useState<string>('');
@@ -520,7 +520,7 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full border-2 border-white shadow-md" style={{ backgroundColor: formData.color }} />
                 <span className="text-xs text-gray-500">
-                  {PRESET_COLORS.find(c => c.hex === formData.color)?.label || '커스텀'}
+                  {PRESET_COLORS.find(c => c.hex === formData.color)?.label ?? ''}
                 </span>
               </div>
             </div>
@@ -744,7 +744,7 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full border-2 border-white shadow-md" style={{ backgroundColor: formData.color }} />
                 <span className="text-xs text-gray-500">
-                  {PRESET_COLORS.find(c => c.hex === formData.color)?.label || '커스텀'}
+                  {PRESET_COLORS.find(c => c.hex === formData.color)?.label ?? ''}
                 </span>
               </div>
             </div>

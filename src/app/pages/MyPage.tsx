@@ -5,7 +5,7 @@ import { Logger } from '../utils/logger';
 import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag } from 'lucide-react';
 import { getMembershipInfo } from '../utils/membership';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
 
 const MEMBERSHIP_INFO: Record<string, { label: string; color: string; nextAt: number | null; benefit: string }> = {
   BASIC:  { label: 'BASIC',  color: '#9CA3AF', nextAt: 100000,  benefit: '기본 서비스 이용' },
@@ -20,6 +20,7 @@ export default function MyPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [membershipLevel, setMembershipLevel] = useState<string>('BASIC');
   const [prefs, setPrefs] = useState({
     cold_sensitivity: 0,
     activity_level: 'medium',
@@ -40,6 +41,15 @@ export default function MyPage() {
         activity_level: p.activity_level ?? 'medium',
         preferred_style: p.preferred_style ?? 'casual',
       });
+      // membership_level — 서버 DB 우선, 실패 시 로컬 폴백
+      fetch(`${API_BASE}/customers/${userId}`)
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(data => {
+          if (data.membership_level) setMembershipLevel(data.membership_level);
+        })
+        .catch(() => {
+          if (p.membership_level) setMembershipLevel(p.membership_level);
+        });
     } else if (userId) {
       // userId는 있지만 profile 없음 (게스트 자동 ID)
       setIsLoggedIn(false);
@@ -125,6 +135,16 @@ export default function MyPage() {
           const mem = getMembershipInfo();
           const COLORS: Record<string, string> = { BASIC:'#9CA3AF', SILVER:'#94A3B8', GOLD:'#F59E0B', VIP:'#8B5CF6' };
           const BENEFITS: Record<string, string> = { BASIC:'기본 서비스 이용', SILVER:'5% 추가 할인', GOLD:'10% 추가 할인 + 무료배송', VIP:'20% 추가 할인 + VIP 전용 혜택' };
+          // 서버 DB membership_level 우선 사용
+          const level = membershipLevel;
+          const LEVELS = ['BASIC', 'SILVER', 'GOLD', 'VIP'];
+          const THRESH: Record<string, number> = { BASIC: 0, SILVER: 100000, GOLD: 300000, VIP: 500000 };
+          const currentIdx = LEVELS.indexOf(level);
+          const nextLevel = currentIdx < LEVELS.length - 1 ? LEVELS[currentIdx + 1] : null;
+          const nextThreshold = nextLevel ? THRESH[nextLevel] : null;
+          const progressPct = nextThreshold
+            ? Math.min(100, Math.round(((mem.totalAmount - THRESH[level]) / (nextThreshold - THRESH[level])) * 100))
+            : 100;
           return (
             <div className="bg-white rounded-2xl p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
@@ -132,24 +152,24 @@ export default function MyPage() {
                 <h3 className="font-semibold text-gray-900">멤버십 등급</h3>
               </div>
               <div className="flex items-center justify-between mb-3">
-                <span className="px-4 py-1.5 rounded-full text-white text-sm font-bold" style={{ backgroundColor: COLORS[mem.level] }}>
-                  {mem.level}
+                <span className="px-4 py-1.5 rounded-full text-white text-sm font-bold" style={{ backgroundColor: COLORS[level] }}>
+                  {level}
                 </span>
-                <span className="text-sm text-gray-600">{BENEFITS[mem.level]}</span>
+                <span className="text-sm text-gray-600">{BENEFITS[level]}</span>
               </div>
               {/* 누적 구매금액 */}
               <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
                 <ShoppingBag className="w-3.5 h-3.5" />
                 이번 기간 누적 {mem.totalAmount.toLocaleString()}원 · 등급 리셋까지 {mem.daysUntilReset}일
               </div>
-              {mem.nextLevel && mem.nextThreshold && (
+              {nextLevel && nextThreshold && (
                 <div>
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>{mem.nextLevel} 달성까지</span>
-                    <span>{(mem.nextThreshold - mem.totalAmount).toLocaleString()}원 남음</span>
+                    <span>{nextLevel} 달성까지</span>
+                    <span>{(nextThreshold - mem.totalAmount).toLocaleString()}원 남음</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div className="h-2 rounded-full transition-all" style={{ width: `${mem.progressPct}%`, backgroundColor: COLORS[mem.nextLevel] }} />
+                    <div className="h-2 rounded-full transition-all" style={{ width: `${progressPct}%`, backgroundColor: COLORS[nextLevel] }} />
                   </div>
                 </div>
               )}
