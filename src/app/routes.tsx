@@ -14,7 +14,7 @@ import Auth from "./pages/Auth";
 import MyPage from "./pages/MyPage";
 import Wishlist from "./pages/Wishlist";
 import Coupons from "./pages/Coupons";
-
+import PurchaseHistory from "./pages/PurchaseHistory";
 import Onboarding from "./pages/Onboarding";
 
 export const router = createBrowserRouter([
@@ -24,6 +24,7 @@ export const router = createBrowserRouter([
   { path: "/mypage",     Component: MyPage },
   { path: "/wishlist",   Component: Wishlist },
   { path: "/coupons",    Component: Coupons },
+  { path: "/purchases",  Component: PurchaseHistory },
   { path: "/wardrobe",   Component: Wardrobe },
   { path: "/outfit",     Component: Outfit },
   { path: "/feedback",   Component: Feedback },
