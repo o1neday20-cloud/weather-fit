@@ -3,9 +3,10 @@ import { cartKey } from '../utils/storage';
 import { Link, useNavigate } from 'react-router';
 import Navigation from '../components/Navigation';
 import { Logger } from '../utils/logger';
+import { getProductById } from '../utils/products';
 import { Heart, ShoppingBag, Trash2, ArrowLeft } from 'lucide-react';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
 
 interface WishItem {
   product_id: string;
@@ -41,13 +42,22 @@ export default function Wishlist() {
     Logger.log('page_view', { page: 'wishlist' });
   }, []);
 
+  // mockProducts의 imageUrl을 우선 사용 (DB/localStorage image_url 경로 불일치 해결)
+  const enrichImageUrl = (item: WishItem): WishItem => {
+    const localProduct = getProductById(item.product_id);
+    return {
+      ...item,
+      image_url: localProduct?.imageUrl || item.image_url,
+    };
+  };
+
   const loadWishlist = async () => {
     setLoading(true);
     const localItems = getLocalWishlist();
     const userId = localStorage.getItem('userId');
     if (userId && !userId.startsWith('anon_')) {
       try {
-        const res = await fetch(`${API_BASE}/wishlist/${userId}`);
+        const res = await fetch(`${API_BASE}/wishlist/${userId}`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
           const apiItems: WishItem[] = await res.json();
           // API 결과 + localStorage 병합 (중복 product_id 제거)
@@ -56,13 +66,13 @@ export default function Wishlist() {
             const localId = (local as any).product_id || (local as any).id;
             if (!merged.find(a => a.product_id === localId)) merged.push(local);
           }
-          setItems(merged);
+          setItems(merged.map(enrichImageUrl));
           setLoading(false);
           return;
         }
       } catch {}
     }
-    setItems(localItems);
+    setItems(localItems.map(enrichImageUrl));
     setLoading(false);
   };
 
@@ -134,14 +144,25 @@ export default function Wishlist() {
               <div key={item.product_id} className="bg-white rounded-xl shadow-sm overflow-hidden group">
                 <Link to={`/product/${item.product_id}`} className="block">
                   <div
-                    className="h-40 flex items-center justify-center"
+                    className="h-40 flex items-center justify-center overflow-hidden"
                     style={{ backgroundColor: item.image_url ? '#f3f4f6' : (item.hex_code || '#e5e7eb') }}
                   >
                     {item.image_url ? (
-                      <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-4xl opacity-30">👕</span>
-                    )}
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          img.style.display = 'none';
+                          (img.nextSibling as HTMLElement)?.style.setProperty('display', 'flex');
+                        }}
+                      />
+                    ) : null}
+                    <span
+                      className="text-4xl opacity-30 items-center justify-center"
+                      style={{ display: item.image_url ? 'none' : 'flex' }}
+                    >👕</span>
                   </div>
                   <div className="p-3">
                     <p className="text-xs text-gray-400">{item.brand}</p>
