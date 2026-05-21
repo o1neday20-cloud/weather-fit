@@ -474,10 +474,12 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
 app.post('/api/purchase', async (req, res) => {
   const { purchase_id, customer_id, product_id, size, price, status, coupon_id, discount_amt, partnerCustomerId } = req.body;
   const numericProductId = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
+  // 프론트에서 숫자(19)로 보내도 DB는 'prod_19' 형태로 저장됨 → 변환
+  const dbProductId = numericProductId ? `prod_${numericProductId}` : String(product_id);
   try {
     // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
     const [productCheck] = await pool.execute(
-      'SELECT product_id FROM product WHERE product_id = ?', [product_id]
+      'SELECT product_id FROM product WHERE product_id = ?', [dbProductId]
     );
     if (!productCheck.length) {
       return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
@@ -493,7 +495,7 @@ app.post('/api/purchase', async (req, res) => {
         await pool.execute(
           `INSERT INTO purchase (purchase_id, customer_id, product_id, status, size, price, coupon_id, discount_amt)
            VALUES (?,?,?,?,?,?,?,?)`,
-          [purchase_id, customer_id, product_id, status || 'paid', size || null, price, coupon_id || null, discount_amt || 0]
+          [purchase_id, customer_id, dbProductId, status || 'paid', size || null, price, coupon_id || null, discount_amt || 0]
         );
       }
       // PURCHASE 이벤트 → Fluentd
@@ -512,14 +514,14 @@ app.post('/api/purchase', async (req, res) => {
       if ((status || 'cart') === 'cart') {
         const [existing] = await pool.execute(
           `SELECT purchase_id FROM purchase WHERE customer_id=? AND product_id=? AND size=? AND status='cart'`,
-          [customer_id, product_id, size]
+          [customer_id, dbProductId, size]
         );
         if (existing.length > 0) return res.json({ success: true, duplicate: true });
       }
       await pool.execute(
         `INSERT INTO purchase (purchase_id, customer_id, product_id, status, size, price, purchase_date)
          VALUES (?,?,?,?,?,?,CURRENT_DATE)`,
-        [purchase_id, customer_id, product_id, status || 'cart', size || null, price || 0]
+        [purchase_id, customer_id, dbProductId, status || 'cart', size || null, price || 0]
       );
       // CART 이벤트 → Fluentd
       sendToFluentd({
