@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cartKey } from '../utils/storage';
 import { Link, useNavigate } from 'react-router';
 import Navigation from '../components/Navigation';
@@ -101,6 +101,38 @@ export default function Shop() {
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
 
   const navigate = useNavigate();
+  const maxScrollDepthRef = useRef(0);
+
+  // 스크롤 깊이 추적 → 페이지 이탈 시 Fluentd SCROLL 이벤트 전송
+  useEffect(() => {
+    maxScrollDepthRef.current = 0;
+    const handleScroll = () => {
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollable <= 0) return;
+      const depth = Math.round((window.scrollY / scrollable) * 100);
+      if (depth > maxScrollDepthRef.current) maxScrollDepthRef.current = depth;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      const partnerCid = localStorage.getItem('partnerCustomerId');
+      if (maxScrollDepthRef.current > 0) {
+        try {
+          fetch('http://210.104.76.135:9880/weatherfit.log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event_type: 'SCROLL',
+              customer_id: partnerCid ? Number(partnerCid) : null,
+              page_url: window.location.href,
+              scroll_depth: maxScrollDepthRef.current,
+            }),
+            keepalive: true,
+          }).catch(() => {});
+        } catch { /* 무시 */ }
+      }
+    };
+  }, []);
 
   useEffect(() => {
     Logger.log('page_view', { page: 'shop' });
