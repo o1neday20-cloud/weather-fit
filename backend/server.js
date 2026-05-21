@@ -15,6 +15,37 @@ const bcrypt   = require('bcryptjs');
 const { Kafka, logLevel } = require('kafkajs');
 const axios = require('axios');
 
+// ── product_id 매핑 (내부 prod_N → 팀원 DB 숫자 ID) ────────────
+const PRODUCT_ID_MAP = {
+  'prod_1': 26, 'prod_2': 27, 'prod_3': 28, 'prod_4': 29,
+  'prod_5': 30, 'prod_6': 31, 'prod_7': 32, 'prod_8': 33,
+  'prod_9': 34, 'prod_10': 35, 'prod_11': 36, 'prod_12': 37,
+  'prod_13': 38, 'prod_14': 39, 'prod_15': 40, 'prod_16': 41,
+  'prod_17': 42, 'prod_18': 43, 'prod_19': 44, 'prod_20': 45,
+  'prod_21': 46, 'prod_22': 47, 'prod_23': 48, 'prod_24': 49,
+  'prod_25': 50, 'prod_26': 51, 'prod_27': 52, 'prod_28': 53,
+};
+
+/**
+ * 프론트의 product_id (prod_N 또는 숫자 N)를 팀원 DB 숫자 ID로 변환.
+ * 1. prod_N 형태 → 매핑 테이블 우선
+ * 2. 숫자로만 온 경우 → prod_{N} 로 복원 후 매핑 테이블 조회
+ * 3. 매핑 없으면 null
+ */
+function toPartnerId(productId) {
+  if (!productId) return null;
+  const str = String(productId);
+  // prod_N 형태 직접 조회
+  if (PRODUCT_ID_MAP[str] !== undefined) return PRODUCT_ID_MAP[str];
+  // 숫자만 온 경우 prod_N 로 복원 후 재조회
+  const numeric = parseInt(str.replace(/[^0-9]/g, ''), 10);
+  if (numeric) {
+    const key = `prod_${numeric}`;
+    if (PRODUCT_ID_MAP[key] !== undefined) return PRODUCT_ID_MAP[key];
+  }
+  return null;
+}
+
 // ── 팀원 서버 2 Fluentd 전송 ──────────────────────────────────
 const FLUENTD_URL = process.env.FLUENTD_URL || 'http://210.104.76.135:9880/weatherfit.log';
 
@@ -226,11 +257,10 @@ app.get('/api/products/:id', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: '상품 없음' });
     // VIEW 이벤트 → Fluentd
     const viewPartnerId = req.query.partnerCustomerId ? Number(req.query.partnerCustomerId) : null;
-    const numericViewProductId = parseInt(String(req.params.id).replace(/[^0-9]/g, ''), 10) || null;
     sendToFluentd({
       event_type: 'VIEW',
       customer_id: viewPartnerId,
-      product_id: numericViewProductId,
+      product_id: toPartnerId(req.params.id),
       timestamp: new Date().toISOString(),
     });
     res.json(rows[0]);
@@ -379,11 +409,10 @@ app.post('/api/wishlist', async (req, res) => {
       [id, customer_id, product_id]
     );
     // WISHLIST 이벤트 → Fluentd
-    const numericWishProductId = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
     sendToFluentd({
       event_type: 'WISHLIST',
       customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
-      product_id: numericWishProductId,
+      product_id: toPartnerId(product_id),
       price: productPrice,
       timestamp: new Date().toISOString(),
     });
@@ -475,9 +504,9 @@ app.post('/api/purchase', async (req, res) => {
   const { purchase_id, customer_id, product_id, size, price, status, coupon_id, discount_amt, partnerCustomerId } = req.body;
   // purchase_id 없으면 서버에서 자동 생성
   const finalPurchaseId = purchase_id || `pur_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const numericProductId = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
   // 프론트에서 숫자(19)로 보내도 DB는 'prod_19' 형태로 저장됨 → 변환
-  const dbProductId = numericProductId ? `prod_${numericProductId}` : String(product_id);
+  const numericRaw = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
+  const dbProductId = numericRaw ? `prod_${numericRaw}` : String(product_id);
   try {
     // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
     const [productCheck] = await pool.execute(
@@ -504,7 +533,7 @@ app.post('/api/purchase', async (req, res) => {
       sendToFluentd({
         event_type: 'PURCHASE',
         customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
-        product_id: numericProductId,
+        product_id: toPartnerId(dbProductId),
         size: size || null,
         price,
         coupon_id: coupon_id || null,
@@ -529,7 +558,7 @@ app.post('/api/purchase', async (req, res) => {
       sendToFluentd({
         event_type: 'CART',
         customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
-        product_id: numericProductId,
+        product_id: toPartnerId(dbProductId),
         size: size || null,
         price,
         timestamp: new Date().toISOString(),
