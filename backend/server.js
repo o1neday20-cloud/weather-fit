@@ -473,6 +473,8 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
 
 app.post('/api/purchase', async (req, res) => {
   const { purchase_id, customer_id, product_id, size, price, status, coupon_id, discount_amt, partnerCustomerId } = req.body;
+  // purchase_id 없으면 서버에서 자동 생성
+  const finalPurchaseId = purchase_id || `pur_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const numericProductId = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
   // 프론트에서 숫자(19)로 보내도 DB는 'prod_19' 형태로 저장됨 → 변환
   const dbProductId = numericProductId ? `prod_${numericProductId}` : String(product_id);
@@ -495,7 +497,7 @@ app.post('/api/purchase', async (req, res) => {
         await pool.execute(
           `INSERT INTO purchase (purchase_id, customer_id, product_id, status, size, price, coupon_id, discount_amt)
            VALUES (?,?,?,?,?,?,?,?)`,
-          [purchase_id, customer_id, dbProductId, status || 'paid', size || null, price, coupon_id || null, discount_amt || 0]
+          [finalPurchaseId, customer_id, dbProductId, status || 'paid', size || null, price, coupon_id || null, discount_amt || 0]
         );
       }
       // PURCHASE 이벤트 → Fluentd
@@ -521,7 +523,7 @@ app.post('/api/purchase', async (req, res) => {
       await pool.execute(
         `INSERT INTO purchase (purchase_id, customer_id, product_id, status, size, price, purchase_date)
          VALUES (?,?,?,?,?,?,CURRENT_DATE)`,
-        [purchase_id, customer_id, dbProductId, status || 'cart', size || null, price || 0]
+        [finalPurchaseId, customer_id, dbProductId, status || 'cart', size || null, price || 0]
       );
       // CART 이벤트 → Fluentd
       sendToFluentd({
