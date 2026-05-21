@@ -226,10 +226,11 @@ app.get('/api/products/:id', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: '상품 없음' });
     // VIEW 이벤트 → Fluentd
     const viewPartnerId = req.query.partnerCustomerId ? Number(req.query.partnerCustomerId) : null;
+    const numericViewProductId = parseInt(String(req.params.id).replace(/[^0-9]/g, ''), 10) || null;
     sendToFluentd({
       event_type: 'VIEW',
       customer_id: viewPartnerId,
-      product_id: req.params.id,
+      product_id: numericViewProductId,
       timestamp: new Date().toISOString(),
     });
     res.json(rows[0]);
