@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { CartItem } from '../utils/products';
+import { useNavigate, useLocation } from 'react-router';
+import { CartItem, PRODUCT_COLORS } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey, cartKey, loadAddressHistory, saveAddress, SavedAddress } from '../utils/storage';
 import { CheckCircle2, Ticket, X, Check, ChevronDown, User, Clock } from 'lucide-react';
 import { loadMyCoupons, calcDiscount, consumeCoupon, isCouponValid, CouponItem } from '../utils/coupon';
 import { addPurchaseAmount } from '../utils/membership';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+
+// 한국어 색상명 → 영문 매핑 (파트너 color_id 조회용)
+const COLOR_NAME_MAP: Record<string, string> = {
+  '화이트': 'WHITE', '블랙': 'BLACK', '네이비': 'NAVY', '차콜': 'CHARCOAL',
+  '그레이': 'GRAY', '라이트그레이': 'LIGHT_GRAY', '베이지': 'BEIGE', '브라운': 'BROWN',
+  '카키': 'KHAKI', '레드': 'RED', '버건디': 'BURGUNDY', '핑크': 'PINK',
+  '블루': 'BLUE', '스카이블루': 'SKY_BLUE', '데님': 'DENIM', '그린': 'GREEN',
+  '민트': 'MINT', '옐로우': 'YELLOW', '오렌지': 'ORANGE', '퍼플': 'PURPLE',
+};
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [cartItems, setCartItems]   = useState<CartItem[]>([]);
   const [formData, setFormData]     = useState({ name: '', phone: '', address: '', detailAddress: '', message: '' });
   const [addToWardrobe, setAddToWardrobe] = useState(true);
@@ -25,7 +35,11 @@ export default function Checkout() {
   const [showAddrHistory, setShowAddrHistory] = useState(false);
 
   useEffect(() => {
-    const cart = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+    // Cart에서 선택된 아이템만 넘어온 경우 state 사용, 아니면 전체 cart 사용
+    const stateItems: CartItem[] | undefined = (location.state as any)?.checkoutItems;
+    const cart = stateItems && stateItems.length > 0
+      ? stateItems
+      : JSON.parse(localStorage.getItem(cartKey()) || '[]');
     if (cart.length === 0) { navigate('/cart'); return; }
     setCartItems(cart);
 
@@ -115,7 +129,43 @@ export default function Checkout() {
       cartItems.map(item => ({ productId: item.product.id, productName: item.product.name, size: item.size, quantity: item.quantity, price: item.product.price })),
       couponInfo?.coupon_id, couponInfo?.discountAmt,
     );
-    localStorage.setItem(cartKey(), JSON.stringify([]));
+
+    // ── WARDROBE 이벤트 전송 (구매 상품 → 옷장 API) ───────────────
+    const userId = localStorage.getItem('userId');
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const partnerColors: any[] = JSON.parse(localStorage.getItem('partnerColors') || '[]');
+    for (const item of cartItems) {
+      const colorHex = item.selectedColor?.hex || item.product.color;
+      const matchedProductColor = Object.values(PRODUCT_COLORS).find(c => c.hex === colorHex);
+      const koLabel = matchedProductColor?.name || '';
+      const enName = COLOR_NAME_MAP[koLabel] || koLabel.toUpperCase();
+      const partnerColor = partnerColors.find((c: any) => (c.name || '').toUpperCase() === enName);
+      const colorId = partnerColor?.id ?? null;
+      const wardrobeId = `wd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      fetch(`${API_BASE}/wardrobe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wardrobe_id: wardrobeId,
+          customer_id: userId,
+          category: (item.product.category || 'top').toUpperCase(),
+          style: (item.product.style || 'casual').toUpperCase(),
+          warmth: item.product.warmth,
+          color: colorHex,
+          color_id: colorId,
+          partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+
+    // 구매한 아이템만 장바구니에서 제거 (선택 구매 지원)
+    const purchasedKeys = new Set(cartItems.map(item => `${item.product.id}__${item.size}`));
+    const fullCart: CartItem[] = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+    const remainingCart = fullCart.filter(
+      item => !purchasedKeys.has(`${item.product.id}__${item.size}`)
+    );
+    localStorage.setItem(cartKey(), JSON.stringify(remainingCart));
     // 배송지 저장
     if (formData.address) {
       saveAddress(formData);

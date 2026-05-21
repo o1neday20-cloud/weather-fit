@@ -9,6 +9,7 @@ import { ShoppingBag, Trash2, Plus, Minus, ArrowLeft } from 'lucide-react';
 export default function Cart() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) {
@@ -22,6 +23,8 @@ export default function Cart() {
   const loadCart = () => {
     const cart = JSON.parse(localStorage.getItem(cartKey()) || '[]');
     setCartItems(cart);
+    // 기본적으로 모든 아이템 선택
+    setSelectedIndices(new Set(cart.map((_: CartItem, i: number) => i)));
   };
 
   const updateQuantity = (index: number, delta: number) => {
@@ -33,24 +36,56 @@ export default function Cart() {
 
   const removeItem = (index: number) => {
     const updated = cartItems.filter((_, i) => i !== index);
+    // 인덱스 재정렬
+    const newSelected = new Set<number>();
+    selectedIndices.forEach(si => {
+      if (si < index) newSelected.add(si);
+      else if (si > index) newSelected.add(si - 1);
+    });
     setCartItems(updated);
+    setSelectedIndices(newSelected);
     localStorage.setItem(cartKey(), JSON.stringify(updated));
     Logger.log('remove_from_cart', { itemIndex: index });
   };
 
-  const getTotalPrice = () => {
-    return cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const toggleItem = (index: number) => {
+    const next = new Set(selectedIndices);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    setSelectedIndices(next);
+  };
+
+  const isAllSelected = cartItems.length > 0 && selectedIndices.size === cartItems.length;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIndices(new Set());
+    } else {
+      setSelectedIndices(new Set(cartItems.map((_, i) => i)));
+    }
+  };
+
+  const getSelectedTotal = () => {
+    return cartItems
+      .filter((_, i) => selectedIndices.has(i))
+      .reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  };
+
+  const getSelectedCount = () => {
+    return [...selectedIndices].reduce((sum, i) => sum + (cartItems[i]?.quantity || 0), 0);
   };
 
   const handleCheckout = () => {
-    if (cartItems.length === 0) return;
+    if (selectedIndices.size === 0) return;
+
+    const selectedItems = cartItems.filter((_, i) => selectedIndices.has(i));
 
     Logger.log('checkout_initiated', {
-      itemCount: cartItems.length,
-      totalPrice: getTotalPrice(),
+      itemCount: selectedItems.length,
+      totalPrice: getSelectedTotal(),
     });
 
-    navigate('/checkout');
+    navigate('/checkout', { state: { checkoutItems: selectedItems } });
   };
 
   return (
@@ -84,92 +119,130 @@ export default function Cart() {
         ) : (
           <div className="grid lg:grid-cols-3 gap-6">
             {/* 장바구니 아이템 */}
-            <div className="lg:col-span-2 space-y-4">
-              {cartItems.map((item, index) => (
-                <div key={index} className="bg-white rounded-xl p-4 shadow-sm">
-                  <div className="flex gap-4">
-                    {/* 상품 이미지 */}
-                    <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
-                      {item.product.imageUrl ? (
-                        <img
-                          src={item.product.imageUrl}
-                          alt={item.product.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const el = e.currentTarget as HTMLImageElement;
-                            el.style.display = 'none';
-                            (el.nextSibling as HTMLElement)?.style.setProperty('display', 'flex');
-                          }}
+            <div className="lg:col-span-2 space-y-3">
+              {/* 전체선택 바 */}
+              <div className="bg-white rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    className="w-5 h-5 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    전체선택 ({selectedIndices.size}/{cartItems.length})
+                  </span>
+                </label>
+                {selectedIndices.size > 0 && (
+                  <span className="text-xs text-gray-400">
+                    {getSelectedCount()}개 상품 선택됨
+                  </span>
+                )}
+              </div>
+
+              {cartItems.map((item, index) => {
+                const isSelected = selectedIndices.has(index);
+                return (
+                  <div
+                    key={index}
+                    className={`bg-white rounded-xl p-4 shadow-sm transition-colors ${
+                      isSelected ? 'ring-2 ring-blue-400' : 'opacity-60'
+                    }`}
+                  >
+                    <div className="flex gap-3">
+                      {/* 체크박스 */}
+                      <div className="flex items-center flex-shrink-0 pt-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleItem(index)}
+                          className="w-5 h-5 rounded accent-blue-600 cursor-pointer"
                         />
-                      ) : null}
-                      <div
-                        className="w-full h-full items-center justify-center text-3xl"
-                        style={{
-                          display: item.product.imageUrl ? 'none' : 'flex',
-                          backgroundColor: item.product.color || '#e5e7eb',
-                        }}
-                      >
-                        <span className="opacity-40">👕</span>
                       </div>
-                    </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0 pr-2">
-                          <div className="text-xs text-gray-500 mb-1">
-                            {item.product.brand}
-                          </div>
-                          <h3 className="font-semibold text-gray-900 truncate">
-                            {item.product.name}
-                          </h3>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {(item as any).selectedColor && (
-                              <div className="flex items-center gap-1">
-                                <div
-                                  className="w-3.5 h-3.5 rounded-full border border-gray-300"
-                                  style={{ backgroundColor: (item as any).selectedColor.hex }}
-                                />
-                                <span className="text-xs text-gray-500">{(item as any).selectedColor.name}</span>
-                              </div>
-                            )}
-                            <span className="text-xs text-gray-500">· {item.size}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => removeItem(index)}
-                          className="p-2 hover:bg-red-50 rounded-lg text-red-600"
+                      {/* 상품 이미지 */}
+                      <div className="w-24 h-24 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
+                        {item.product.imageUrl ? (
+                          <img
+                            src={item.product.imageUrl}
+                            alt={item.product.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const el = e.currentTarget as HTMLImageElement;
+                              el.style.display = 'none';
+                              (el.nextSibling as HTMLElement)?.style.setProperty('display', 'flex');
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className="w-full h-full items-center justify-center text-3xl"
+                          style={{
+                            display: item.product.imageUrl ? 'none' : 'flex',
+                            backgroundColor: item.product.color || '#e5e7eb',
+                          }}
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          <span className="opacity-40">👕</span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-xs text-gray-500 mb-1">
+                              {item.product.brand}
+                            </div>
+                            <h3 className="font-semibold text-gray-900 truncate">
+                              {item.product.name}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {(item as any).selectedColor && (
+                                <div className="flex items-center gap-1">
+                                  <div
+                                    className="w-3.5 h-3.5 rounded-full border border-gray-300"
+                                    style={{ backgroundColor: (item as any).selectedColor.hex }}
+                                  />
+                                  <span className="text-xs text-gray-500">{(item as any).selectedColor.name}</span>
+                                </div>
+                              )}
+                              <span className="text-xs text-gray-500">· {item.size}</span>
+                            </div>
+                          </div>
                           <button
-                            onClick={() => updateQuantity(index, -1)}
-                            className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center justify-center"
+                            onClick={() => removeItem(index)}
+                            className="p-2 hover:bg-red-50 rounded-lg text-red-600"
                           >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-medium">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(index, 1)}
-                            className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center justify-center"
-                          >
-                            <Plus className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
 
-                        <div className="text-lg font-bold text-gray-900">
-                          {(item.product.price * item.quantity).toLocaleString()}원
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updateQuantity(index, -1)}
+                              className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center justify-center"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="w-8 text-center font-medium">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(index, 1)}
+                              className="w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center justify-center"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="text-lg font-bold text-gray-900">
+                            {(item.product.price * item.quantity).toLocaleString()}원
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* 주문 요약 */}
@@ -179,9 +252,15 @@ export default function Cart() {
 
                 <div className="space-y-3 mb-4 pb-4 border-b">
                   <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">선택 상품</span>
+                    <span className="text-gray-500 text-xs">
+                      {selectedIndices.size}종 / {getSelectedCount()}개
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-600">상품 금액</span>
                     <span className="text-gray-900">
-                      {getTotalPrice().toLocaleString()}원
+                      {getSelectedTotal().toLocaleString()}원
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -193,15 +272,18 @@ export default function Cart() {
                 <div className="flex justify-between mb-6">
                   <span className="font-semibold text-gray-900">총 결제금액</span>
                   <span className="text-2xl font-bold text-blue-600">
-                    {getTotalPrice().toLocaleString()}원
+                    {getSelectedTotal().toLocaleString()}원
                   </span>
                 </div>
 
                 <button
                   onClick={handleCheckout}
-                  className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors mb-3"
+                  disabled={selectedIndices.size === 0}
+                  className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors mb-3"
                 >
-                  구매하기
+                  {selectedIndices.size === 0
+                    ? '상품을 선택해주세요'
+                    : `선택 상품 구매하기 (${selectedIndices.size}종)`}
                 </button>
 
                 <Link
