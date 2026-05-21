@@ -5,7 +5,42 @@ import { searchLocations } from '../utils/weatherApi';
 import { grantWelcomeCoupons } from '../utils/coupon';
 import { MapPin, X } from 'lucide-react';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+const PARTNER_API = 'http://210.104.76.135:8080';
+
+/** 팀원 서버 회원가입 연동 — 응답 숫자 customer_id를 partnerCustomerId로 저장 */
+async function callPartnerSignup(regForm: any): Promise<void> {
+  const genderMap: Record<string, string> = { M: 'MALE', F: 'FEMALE' };
+  try {
+    const res = await fetch(`${PARTNER_API}/api/customers/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: regForm.name,
+        email: regForm.email,
+        phone: regForm.phone,
+        birth_date: regForm.birth_date,
+        gender: genderMap[regForm.gender] || 'MALE',
+        preferred_style: 'CASUAL',
+        activity_level: 'MEDIUM',
+        cold_sensitivity: 0,
+        marketing_consent: regForm.marketing_consent,
+        push_consent: regForm.push_consent,
+        email_consent: regForm.email_consent,
+        sms_consent: regForm.sms_consent,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.customer_id != null) {
+        localStorage.setItem('partnerCustomerId', String(data.customer_id));
+      }
+    }
+  } catch {
+    // 파트너 API 실패해도 메인 회원가입은 완료됨
+  }
+}
 
 /** 로그인 시 비로그인 찜 목록을 로그인 계정으로 병합 */
 function mergeGuestWishlist(userId: string) {
@@ -263,6 +298,7 @@ export default function Auth() {
       grantWelcomeCoupons(data.customer.customer_id);
       mergeGuestWishlist(data.customer.customer_id);
       mergeGuestWardrobe(data.customer.customer_id);
+      callPartnerSignup(regForm); // 팀원 서버 연동 (fire-and-forget)
       navigate('/onboarding');
     } catch {
       try {

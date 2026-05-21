@@ -129,6 +129,7 @@ export class Logger {
     size: string; quantity: number; price: number;
   }>, couponId?: string, discountAmt?: number) {
     const userId = this.getUserId();
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
     for (const item of items) {
       const purchaseId = `pur_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const payload = {
@@ -136,6 +137,7 @@ export class Logger {
         product_id: item.productId, status: 'paid',
         size: item.size, price: item.price * item.quantity,
         coupon_id: couponId ?? null, discount_amt: discountAmt ?? 0,
+        partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
       };
 
       // Fluentd → Kafka weatherfit.purchase
@@ -156,6 +158,7 @@ export class Logger {
     feedback: string; regionId?: number;
   }) {
     const userId = this.getUserId();
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
     const feedbackId = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const payload = {
       feedback_id: feedbackId, customer_id: userId,
@@ -165,6 +168,7 @@ export class Logger {
       weather_condition: data.weatherCondition,
       recommended_outfit: data.recommendedOutfit,
       feedback: data.feedback,
+      partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
     };
 
     // Fluentd → Kafka weatherfit.feedback

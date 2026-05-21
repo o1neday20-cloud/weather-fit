@@ -89,6 +89,24 @@ export default function Wardrobe() {
 
     // 백엔드 동기화 (실패해도 localStorage는 이미 저장됨)
     const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+
+    // partnerColors에서 선택한 색상의 color_id 조회
+    const COLOR_NAME_MAP: Record<string, string> = {
+      '화이트': 'WHITE', '블랙': 'BLACK', '네이비': 'NAVY', '차콜': 'CHARCOAL',
+      '그레이': 'GRAY', '라이트그레이': 'LIGHT_GRAY', '베이지': 'BEIGE', '브라운': 'BROWN',
+      '카키': 'KHAKI', '레드': 'RED', '버건디': 'BURGUNDY', '핑크': 'PINK',
+      '블루': 'BLUE', '스카이블루': 'SKY_BLUE', '데님': 'DENIM', '그린': 'GREEN',
+      '민트': 'MINT', '옐로우': 'YELLOW', '오렌지': 'ORANGE', '퍼플': 'PURPLE',
+    };
+    const partnerColors: any[] = JSON.parse(localStorage.getItem('partnerColors') || '[]');
+    const koLabel = PRESET_COLORS.find(c => c.hex === item.color)?.label || '';
+    const enName = COLOR_NAME_MAP[koLabel] || koLabel.toUpperCase();
+    const matchedColor = partnerColors.find(
+      (c: any) => (c.name || '').toUpperCase() === enName
+    );
+    const colorId = matchedColor?.id ?? null;
+
     fetch(`${API_BASE}/wardrobe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -98,6 +116,8 @@ export default function Wardrobe() {
         category: item.category,
         style: item.style,
         warmth: item.warmth,
+        color_id: colorId,
+        partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
       }),
     }).catch(() => {});
   };

@@ -142,7 +142,9 @@ export default function ProductDetail() {
 
     // 백엔드 호출 → VIEW 이벤트 Fluentd 전송 + 상품 데이터 사용
     // 실패 시 로컬 데이터로 폴백
-    fetch(`${API_BASE}/products/${id}`)
+    const partnerCid = localStorage.getItem('partnerCustomerId');
+    const viewQs = partnerCid ? `?partnerCustomerId=${partnerCid}` : '';
+    fetch(`${API_BASE}/products/${id}${viewQs}`)
       .then(res => { if (!res.ok) throw new Error('not ok'); return res.json(); })
       .then(data => {
         const merged: Product = {

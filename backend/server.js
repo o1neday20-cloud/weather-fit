@@ -16,7 +16,7 @@ const { Kafka, logLevel } = require('kafkajs');
 const axios = require('axios');
 
 // ── 팀원 서버 2 Fluentd 전송 ──────────────────────────────────
-const FLUENTD_URL = process.env.FLUENTD_URL || 'http://210.104.76.135:9880/weatherfit.logs';
+const FLUENTD_URL = process.env.FLUENTD_URL || 'http://210.104.76.135:9880/weatherfit.log';
 
 async function sendToFluentd(eventData) {
   try {
@@ -225,8 +225,10 @@ app.get('/api/products/:id', async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error: '상품 없음' });
     // VIEW 이벤트 → Fluentd
+    const viewPartnerId = req.query.partnerCustomerId ? Number(req.query.partnerCustomerId) : null;
     sendToFluentd({
       event_type: 'VIEW',
+      customer_id: viewPartnerId,
       product_id: req.params.id,
       timestamp: new Date().toISOString(),
     });
@@ -355,7 +357,7 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 
 // 찜 추가  POST /api/wishlist
 app.post('/api/wishlist', async (req, res) => {
-  const { customer_id, product_id } = req.body;
+  const { customer_id, product_id, partnerCustomerId } = req.body;
   try {
     // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
     const [productCheck] = await pool.execute(
@@ -375,9 +377,11 @@ app.post('/api/wishlist', async (req, res) => {
       [id, customer_id, product_id]
     );
     // WISHLIST 이벤트 → Fluentd
+    const numericWishProductId = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
     sendToFluentd({
       event_type: 'WISHLIST',
-      customer_id, product_id,
+      customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+      product_id: numericWishProductId,
       timestamp: new Date().toISOString(),
     });
     res.json({ success: true });
@@ -411,7 +415,7 @@ app.get('/api/wardrobe/:customerId', async (req, res) => {
 });
 
 app.post('/api/wardrobe', async (req, res) => {
-  const { item_id, wardrobe_id, customer_id, category, style, color_id, warmth } = req.body;
+  const { item_id, wardrobe_id, customer_id, category, style, color_id, warmth, partnerCustomerId } = req.body;
     const itemId = item_id || wardrobe_id;
   try {
     await pool.execute(
@@ -422,7 +426,11 @@ app.post('/api/wardrobe', async (req, res) => {
     // WARDROBE 이벤트 → Fluentd
     sendToFluentd({
       event_type: 'WARDROBE',
-      customer_id, category, style, warmth,
+      customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+      category: (category || '').toUpperCase(),
+      style: (style || '').toUpperCase(),
+      color_id: color_id ?? null,
+      warmth,
       timestamp: new Date().toISOString(),
     });
     res.json({ success: true });
@@ -452,7 +460,8 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
 });
 
 app.post('/api/purchase', async (req, res) => {
-  const { purchase_id, customer_id, product_id, size, price, status, coupon_id, discount_amt } = req.body;
+  const { purchase_id, customer_id, product_id, size, price, status, coupon_id, discount_amt, partnerCustomerId } = req.body;
+  const numericProductId = parseInt(String(product_id).replace(/[^0-9]/g, ''), 10) || null;
   try {
     // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
     const [productCheck] = await pool.execute(
@@ -478,7 +487,10 @@ app.post('/api/purchase', async (req, res) => {
       // PURCHASE 이벤트 → Fluentd
       sendToFluentd({
         event_type: 'PURCHASE',
-        customer_id, product_id, size, price,
+        customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+        product_id: numericProductId,
+        size: size || null,
+        price,
         coupon_id: coupon_id || null,
         discount_amt: discount_amt || 0,
         timestamp: new Date().toISOString(),
@@ -500,7 +512,10 @@ app.post('/api/purchase', async (req, res) => {
       // CART 이벤트 → Fluentd
       sendToFluentd({
         event_type: 'CART',
-        customer_id, product_id, size, price,
+        customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+        product_id: numericProductId,
+        size: size || null,
+        price,
         timestamp: new Date().toISOString(),
       });
     }
@@ -521,7 +536,8 @@ app.patch('/api/purchase/:purchaseId/status', async (req, res) => {
 // ================================================================
 app.post('/api/feedback', async (req, res) => {
   const { feedback_id, customer_id, region_id, actual_temp, feels_like_temp,
-          humidity, wind_speed, weather_condition, recommended_outfit, feedback } = req.body;
+          humidity, wind_speed, weather_condition, recommended_outfit, feedback,
+          partnerCustomerId } = req.body;
   try {
     const fid = feedback_id || `fb_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
 
@@ -538,6 +554,13 @@ app.post('/api/feedback', async (req, res) => {
     const VALID_FEEDBACK = ['너무추움', '춥다', '적당', '덥다', '너무더움'];
     const safeFeedback = VALID_FEEDBACK.includes(feedback) ? feedback : '적당';
 
+    // 날씨 조건 → 영어 코드 변환
+    const WEATHER_CODE_MAP = {
+      '맑음': 'CLEAR', '흐림': 'CLOUDY', '구름많음': 'PARTLY_CLOUDY',
+      '비': 'RAIN', '눈': 'SNOW', '안개': 'FOG',
+    };
+    const mappedCondition = WEATHER_CODE_MAP[weather_condition] || weather_condition;
+
     await pool.execute(
       `INSERT INTO temperature_feedback
          (feedback_id, customer_id, region_id, actual_temp, feels_like_temp,
@@ -549,10 +572,11 @@ app.post('/api/feedback', async (req, res) => {
     // FEEDBACK 이벤트 → Fluentd
     sendToFluentd({
       event_type: 'FEEDBACK',
-      customer_id: safeCustomerId,
-      actual_temp, feels_like_temp,
+      customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+      temperature: actual_temp,
+      feels_like_temp,
       humidity, wind_speed,
-      weather_condition,
+      weather_condition: mappedCondition,
       feedback: safeFeedback,
       feedback_date: new Date().toISOString().split('T')[0],
       timestamp: new Date().toISOString(),
