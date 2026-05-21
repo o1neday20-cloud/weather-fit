@@ -32,6 +32,7 @@ import { Plus, Shirt, Upload, X, Camera, Trash2, RotateCcw, ChevronDown, Chevron
 
 interface DeletedItem extends ClothingItemType {
   deletedAt: string;
+  imageUrl?: string; // 쇼핑 상품에서 추가된 아이템은 imageUrl 필드 사용
 }
 
 export default function Wardrobe() {
@@ -70,8 +71,13 @@ export default function Wardrobe() {
     const item = wardrobe.find(i => i.id === id);
     if (!item) return;
 
-    // 소프트 삭제: 삭제 목록에 보관
-    const deletedItem: DeletedItem = { ...item, deletedAt: new Date().toISOString() };
+    // 소프트 삭제: 삭제 목록에 보관 (image + imageUrl 모두 보존)
+    const deletedItem: DeletedItem = {
+      ...item,
+      image: item.image || (item as any).imageUrl,
+      imageUrl: (item as any).imageUrl || item.image,
+      deletedAt: new Date().toISOString(),
+    };
     const updatedDeleted = [deletedItem, ...deletedItems].slice(0, 30); // 최대 30개 보관
     setDeletedItems(updatedDeleted);
     localStorage.setItem(deletedWardrobeKey(), JSON.stringify(updatedDeleted));
@@ -234,8 +240,15 @@ export default function Wardrobe() {
                         className="w-12 h-12 rounded-lg flex-shrink-0 overflow-hidden"
                         style={{ backgroundColor: item.color || '#e5e7eb' }}
                       >
-                        {item.image ? (
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        {(item.image || item.imageUrl) ? (
+                          <img
+                            src={item.image || item.imageUrl}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-xl opacity-40">👕</div>
                         )}
