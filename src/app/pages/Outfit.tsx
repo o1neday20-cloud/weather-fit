@@ -4,7 +4,7 @@ import Navigation from '../components/Navigation';
 import ClothingItem from '../components/ClothingItem';
 import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
-import { getRecommendedProducts } from '../utils/products';
+import { getRecommendedProducts, mockProducts } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { Sparkles, RefreshCw, ShoppingBag } from 'lucide-react';
@@ -13,6 +13,7 @@ export default function Outfit() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [feelTemp, setFeelTemp] = useState<number>(0);
   const [recommendedOutfit, setRecommendedOutfit] = useState<ClothingItemType[]>([]);
+  const [colorReason, setColorReason] = useState<string>('');
   const [purchaseSuggestions, setPurchaseSuggestions] = useState<ClothingItemType[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,8 +58,9 @@ export default function Outfit() {
       const wardrobeString = localStorage.getItem(wardrobeKey());
       const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
-      const outfit = recommendOutfit(tempPrediction.perceived, wardrobe, seed);
-      setRecommendedOutfit(outfit);
+      const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, seed, mockProducts);
+      setRecommendedOutfit(outfitResult.items);
+      setColorReason(outfitResult.colorReason);
 
       const ownedIds = wardrobe.map(item => item.id);
       const suggestions = getRecommendedProducts(tempPrediction.perceived, ownedIds);
@@ -123,6 +125,13 @@ export default function Outfit() {
             {recommendedOutfit.length > 0 ? '내 옷장에서 선택한 코디' : '오늘 날씨에 맞는 추천 아이템'}
           </h2>
           
+          {colorReason && recommendedOutfit.length > 0 && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-purple-50 rounded-xl border border-purple-100">
+              <span className="text-purple-400 text-sm">✨</span>
+              <p className="text-sm text-purple-700 font-medium">{colorReason}</p>
+            </div>
+          )}
+
           {recommendedOutfit.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
               {recommendedOutfit.map((item) => (

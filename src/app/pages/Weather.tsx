@@ -10,6 +10,7 @@ import {
   WeeklyForecast
 } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
+import { mockProducts } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { MapPin, Search, Cloud, CloudRain, CloudSnow, CloudFog, Sun, ChevronRight } from 'lucide-react';
@@ -97,8 +98,8 @@ export default function Weather() {
     const wardrobeString = localStorage.getItem(wardrobeKey());
     const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
-    const outfit = recommendOutfit(tempPrediction.perceived, wardrobe, forecast.date.split('-').join('') | 0);
-    setSelectedDayOutfit(outfit);
+    const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, forecast.date.split('-').join('') | 0, mockProducts);
+    setSelectedDayOutfit(outfitResult.items);
 
     Logger.log('forecast_selected', {
       date: forecast.date,

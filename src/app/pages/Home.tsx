@@ -5,6 +5,7 @@ import WeatherCard from '../components/WeatherCard';
 import ClothingItem from '../components/ClothingItem';
 import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
+import { mockProducts } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { Sparkles, TrendingUp, Settings } from 'lucide-react';
@@ -42,11 +43,11 @@ export default function Home() {
     const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
     // 코디 추천
-    const outfit = recommendOutfit(tempPrediction.perceived, wardrobe);
-    setRecommendedOutfit(outfit);
+    const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, undefined, mockProducts);
+    setRecommendedOutfit(outfitResult.items);
 
     // 현재 추천 코디 저장 (피드백용)
-    localStorage.setItem('currentRecommendedOutfit', JSON.stringify(outfit));
+    localStorage.setItem('currentRecommendedOutfit', JSON.stringify(outfitResult.items));
 
     Logger.log('weather_check', {
       temperature: weatherData.temperature,
