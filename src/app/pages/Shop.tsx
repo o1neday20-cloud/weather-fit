@@ -6,7 +6,7 @@ import { mockProducts, Product } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { ShoppingBag, Search, X, CheckCircle, Heart } from 'lucide-react';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
 function wishlistKey(): string {
   const userId = localStorage.getItem('userId');
   if (userId && !userId.startsWith('anon_')) return `wishlist_${userId}`;
@@ -175,6 +175,25 @@ export default function Shop() {
     localStorage.setItem(cartKey(), JSON.stringify(cart));
     window.dispatchEvent(new Event('storage'));
     Logger.log('add_to_cart', { productId: product.id, productName: product.name });
+
+    // 백엔드 장바구니 API 호출 (실패해도 localStorage는 이미 저장됨)
+    try {
+      const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+      const numericProductId = parseInt(String(product.id).replace(/[^0-9]/g, ''), 10) || null;
+      fetch(`${API_BASE}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+          product_id: numericProductId,
+          status: 'cart',
+          price: product.price,
+          size: product.sizes[0],
+        }),
+        signal: AbortSignal.timeout(3000),
+        keepalive: true,
+      }).catch(() => {});
+    } catch { /* 무시 */ }
 
     // GA4 이벤트 전송 (추적 스크립트 연동)
     if (typeof window !== 'undefined' && (window as any).gtag) {
