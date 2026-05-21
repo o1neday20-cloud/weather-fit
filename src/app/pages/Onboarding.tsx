@@ -83,12 +83,31 @@ export default function Onboarding() {
         localStorage.setItem('userProfile', JSON.stringify(newProfile));
 
         // 서버에도 반영 시도
-        const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
         fetch(`${API_BASE}/customers/${userId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updated),
         }).catch(() => {});
+
+        // 팀원 서버에 cold_sensitivity / preferred_style / activity_level 업데이트
+        const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+        if (partnerCustomerId) {
+          const coldValue = (updated.cold_sensitivity as number) + 3; // -2..2 → 1..5
+          try {
+            fetch(`http://210.104.76.135:8080/api/customers/${Number(partnerCustomerId)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                cold_sensitivity: coldValue,
+                preferred_style: String(updated.preferred_style).toUpperCase(),
+                activity_level: String(updated.activity_level).toUpperCase(),
+              }),
+              signal: AbortSignal.timeout(3000),
+              keepalive: true,
+            }).catch(() => {});
+          } catch { /* 무시 */ }
+        }
       }
       // userPreference도 함께 저장 (Outfit 페이지에서 사용)
       localStorage.setItem('userPreference', JSON.stringify({
