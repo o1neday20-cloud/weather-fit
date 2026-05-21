@@ -184,7 +184,8 @@ export default function Shop() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
+          customer_id: localStorage.getItem('userId'),
+          partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
           product_id: numericProductId,
           status: 'cart',
           price: product.price,
