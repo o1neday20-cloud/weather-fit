@@ -359,13 +359,14 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 app.post('/api/wishlist', async (req, res) => {
   const { customer_id, product_id, partnerCustomerId } = req.body;
   try {
-    // product_id 존재 여부 확인 (purchase_ibfk_2 FK 오류 방지)
+    // product_id 존재 여부 확인 + price 조회 (purchase_ibfk_2 FK 오류 방지)
     const [productCheck] = await pool.execute(
-      'SELECT product_id FROM product WHERE product_id = ?', [product_id]
+      'SELECT product_id, price FROM product WHERE product_id = ?', [product_id]
     );
     if (!productCheck.length) {
       return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
     }
+    const productPrice = productCheck[0].price ?? null;
     const [exist] = await pool.execute(
       `SELECT purchase_id FROM purchase WHERE customer_id=? AND product_id=? AND status='wishlist'`,
       [customer_id, product_id]
@@ -382,6 +383,7 @@ app.post('/api/wishlist', async (req, res) => {
       event_type: 'WISHLIST',
       customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
       product_id: numericWishProductId,
+      price: productPrice,
       timestamp: new Date().toISOString(),
     });
     res.json({ success: true });
@@ -563,6 +565,14 @@ app.post('/api/feedback', async (req, res) => {
     const VALID_FEEDBACK = ['너무추움', '춥다', '적당', '덥다', '너무더움'];
     const safeFeedback = VALID_FEEDBACK.includes(feedback) ? feedback : '적당';
 
+    // feedback 한글 → 영어 변환 (Fluentd 전용)
+    const FEEDBACK_EN_MAP = {
+      '너무추움': 'COLD', '춥다': 'COLD', '추움': 'COLD',
+      '적당':    'PERFECT', '딱좋음': 'PERFECT',
+      '덥다':    'HOT', '더움': 'HOT', '너무더움': 'HOT',
+    };
+    const feedbackEn = FEEDBACK_EN_MAP[safeFeedback] || FEEDBACK_EN_MAP[feedback] || 'PERFECT';
+
     // 날씨 조건 → 영어 코드 변환
     const WEATHER_CODE_MAP = {
       '맑음': 'CLEAR', '흐림': 'CLOUDY', '구름많음': 'PARTLY_CLOUDY',
@@ -582,11 +592,11 @@ app.post('/api/feedback', async (req, res) => {
     sendToFluentd({
       event_type: 'FEEDBACK',
       customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
-      temperature: actual_temp,
+      actual_temp,
       feels_like_temp,
       humidity, wind_speed,
       weather_condition: mappedCondition,
-      feedback: safeFeedback,
+      feedback: feedbackEn,
       feedback_date: new Date().toISOString().split('T')[0],
       timestamp: new Date().toISOString(),
     });
