@@ -441,10 +441,12 @@ app.post('/api/wishlist', async (req, res) => {
 
 app.delete('/api/wishlist/:customerId/:productId', async (req, res) => {
   try {
-    const partnerProductId = toPartnerId(req.params.productId) || req.params.productId;
+    const custId = await getPartnerCustomerId(req.params.customerId);
+    if (!custId) return res.status(400).json({ error: 'customer 없음' });
+    const partnerProductId = toPartnerId(req.params.productId);
     await pool.execute(
       `DELETE FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'wishlist'`,
-      [req.params.customerId, partnerProductId]
+      [custId, partnerProductId]
     );
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '찜 삭제 실패' }); }
