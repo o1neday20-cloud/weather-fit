@@ -5,7 +5,7 @@ import { searchLocations } from '../utils/weatherApi';
 import { grantWelcomeCoupons } from '../utils/coupon';
 import { MapPin, X } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 const PARTNER_API = 'http://210.104.76.135:8080';
 
 /** 팀원 서버 회원가입 연동 — 응답 숫자 customer_id를 partnerCustomerId로 저장 */
@@ -18,9 +18,9 @@ async function callPartnerSignup(regForm: any): Promise<void> {
       body: JSON.stringify({
         name: regForm.name,
         email: regForm.email,
-        phone: regForm.phone,
+        phone: regForm.phone.replace(/[-\s]/g, ''),
         birth_date: regForm.birth_date,
-        gender: genderMap[regForm.gender] || 'MALE',
+        gender: genderMap[regForm.gender] ?? 'MALE',
         preferred_style: 'CASUAL',
         activity_level: 'MEDIUM',
         cold_sensitivity: 0,
@@ -230,6 +230,7 @@ export default function Auth() {
         const data = await res.json();
         setEmailChecked(!data.exists);
         if (data.exists) setError('이미 사용중인 이메일입니다');
+        setEmailChecking(false);
         return;
       }
     } catch {}
@@ -260,6 +261,10 @@ export default function Auth() {
       if (!res.ok) { setError(data.error); return; }
       localStorage.setItem('userId', data.customer.customer_id);
       localStorage.setItem('userProfile', JSON.stringify(data.customer));
+      // 팀원 DB의 bigint PK를 partnerCustomerId로 저장 (Fluentd 이벤트에서 customer_id로 사용)
+      if (data.customer.id != null) {
+        localStorage.setItem('partnerCustomerId', String(data.customer.id));
+      }
       mergeGuestWishlist(data.customer.customer_id);
       mergeGuestWardrobe(data.customer.customer_id);
       await Logger.ensureCustomer();
@@ -378,27 +383,26 @@ export default function Auth() {
             <form onSubmit={handleRegister} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">기본 정보</p>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
-                  <input type="text" value={regForm.name}
-                    onChange={e => setRegForm({...regForm, name: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    placeholder="홍길동" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">생년월일 <span className="text-red-500">*</span></label>
-                  <input type="date" value={regForm.birth_date}
-                    onChange={e => setRegForm({...regForm, birth_date: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
+                <input type="text" value={regForm.name}
+                  onChange={e => setRegForm({...regForm, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="홍길동" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">생년월일 <span className="text-red-500">*</span></label>
+                <input type="date" value={regForm.birth_date}
+                  onChange={e => setRegForm({...regForm, birth_date: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">이메일 *</label>
                 <div className="flex gap-2">
                   <input type="email" required value={regForm.email}
-                    onChange={e => { setRegForm({...regForm, email: e.target.value}); setEmailChecked(null); }}
+                    onChange={e => { setRegForm({...regForm, email: e.target.value}); setEmailChecked(null); setEmailChecking(false); }}
                     className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
                       emailChecked === true ? 'border-green-400 bg-green-50' :
                       emailChecked === false ? 'border-red-400 bg-red-50' : 'border-gray-300'
@@ -425,24 +429,23 @@ export default function Auth() {
                   placeholder="01000000000" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">성별 <span className="text-red-500">*</span></label>
-                  <select value={regForm.gender}
-                    onChange={e => setRegForm({...regForm, gender: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                    <option value="N">선택해주세요</option>
-                    <option value="M">남성</option>
-                    <option value="F">여성</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">지역</label>
-                  <RegionAutocomplete
-                    value={regForm.region_name}
-                    onChange={name => setRegForm({...regForm, region_name: name})}
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">성별 <span className="text-red-500">*</span></label>
+                <select value={regForm.gender}
+                  onChange={e => setRegForm({...regForm, gender: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                  <option value="N">선택해주세요</option>
+                  <option value="M">남성</option>
+                  <option value="F">여성</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">지역</label>
+                <RegionAutocomplete
+                  value={regForm.region_name}
+                  onChange={name => setRegForm({...regForm, region_name: name})}
+                />
               </div>
 
               <div>
