@@ -300,6 +300,10 @@ export default function Auth() {
       if (!res.ok) { setError(data.error); return; }
       localStorage.setItem('userId', data.customer.customer_id);
       localStorage.setItem('userProfile', JSON.stringify(data.customer));
+      // 팀원 DB bigint PK → partnerCustomerId 저장 (wishlist/wardrobe API 인증에 사용)
+      if (data.customer.id != null) {
+        localStorage.setItem('partnerCustomerId', String(data.customer.id));
+      }
       grantWelcomeCoupons(data.customer.customer_id);
       mergeGuestWishlist(data.customer.customer_id);
       mergeGuestWardrobe(data.customer.customer_id);

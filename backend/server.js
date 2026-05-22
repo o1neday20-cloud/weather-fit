@@ -53,6 +53,16 @@ function toPartnerId(productId) {
   return n || null;
 }
 
+// ── customer uid → bigint id 변환 헬퍼 ───────────────────────
+// 숫자 문자열이면 그대로 Number 반환,
+// uid_xxx 형태면 DB에서 id 조회 후 반환
+async function getPartnerCustomerId(customerId) {
+  if (!customerId) return null;
+  if (/^\d+$/.test(String(customerId))) return Number(customerId);
+  const [rows] = await pool.execute('SELECT id FROM customer WHERE uid = ?', [customerId]);
+  return rows.length ? rows[0].id : null;
+}
+
 // ── Fluentd 전송 ──────────────────────────────────────────────
 const FLUENTD_URL = process.env.FLUENTD_URL || 'http://210.104.76.135:9880/weatherfit.log';
 
@@ -366,11 +376,15 @@ app.get('/api/coupons/my/:customerId', async (req, res) => {
 // ================================================================
 // WISHLIST (찜)
 // purchase 테이블 status='wishlist' 사용
-// customer_id(bigint) = partnerCustomerId, product_id(bigint) = toPartnerId()
+// customer_id: uid(문자) → getPartnerCustomerId()로 bigint 변환
+// product_id:  prod_N → toPartnerId()로 bigint 변환
 // purchased_at(datetime) 사용
 // ================================================================
 app.get('/api/wishlist/:customerId', async (req, res) => {
   try {
+    const custId = await getPartnerCustomerId(req.params.customerId);
+    if (!custId) return res.status(400).json({ error: 'customer_id 변환 실패' });
+
     const [rows] = await pool.execute(
       `SELECT pu.id AS purchase_id, pu.customer_id, pu.product_id,
               pu.status, pu.purchased_at AS wished_at,
@@ -379,7 +393,7 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
        JOIN product p ON pu.product_id = p.id
        WHERE pu.customer_id = ? AND pu.status = 'wishlist'
        ORDER BY pu.purchased_at DESC`,
-      [req.params.customerId]
+      [custId]
     );
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: '찜 목록 조회 실패' }); }
@@ -387,10 +401,11 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 
 app.post('/api/wishlist', async (req, res) => {
   const { customer_id, product_id, partnerCustomerId } = req.body;
-  const partnerCustId    = partnerCustomerId ? Number(partnerCustomerId) : null;
+  // customer_id(uid_xxx) 우선, 없으면 partnerCustomerId(bigint) 사용
+  const custId           = await getPartnerCustomerId(customer_id || partnerCustomerId);
   const partnerProductId = toPartnerId(product_id);
 
-  if (!partnerCustId || !partnerProductId) {
+  if (!custId || !partnerProductId) {
     return res.status(400).json({ error: 'customer_id 또는 product_id 변환 실패' });
   }
   try {
@@ -403,19 +418,19 @@ app.post('/api/wishlist', async (req, res) => {
 
     const [exist] = await pool.execute(
       `SELECT id FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'wishlist'`,
-      [partnerCustId, partnerProductId]
+      [custId, partnerProductId]
     );
     if (exist.length > 0) return res.json({ success: true, duplicate: true });
 
     await pool.execute(
       `INSERT INTO purchase (customer_id, product_id, price, size, status, purchased_at)
        VALUES (?, ?, 0, NULL, 'wishlist', NOW())`,
-      [partnerCustId, partnerProductId]
+      [custId, partnerProductId]
     );
 
     sendToFluentd({
       event_type:  'WISHLIST',
-      customer_id: partnerCustId,
+      customer_id: custId,
       product_id:  partnerProductId,
       price:       productCheck[0].price ?? null,
       timestamp:   new Date().toISOString(),
@@ -439,12 +454,16 @@ app.delete('/api/wishlist/:customerId/:productId', async (req, res) => {
 // WARDROBE
 // wardrobe_item: id(bigint PK auto), customer_id(bigint),
 //               category, style, color_id, warmth, registered_date
+// customer_id: uid(문자) → getPartnerCustomerId()로 bigint 변환
 // ================================================================
 app.get('/api/wardrobe/:customerId', async (req, res) => {
   try {
+    const custId = await getPartnerCustomerId(req.params.customerId);
+    if (!custId) return res.status(400).json({ error: 'customer_id 변환 실패' });
+
     const [rows] = await pool.execute(
       'SELECT * FROM wardrobe_item WHERE customer_id = ? ORDER BY id DESC',
-      [req.params.customerId]
+      [custId]
     );
     res.json(rows);
   } catch (err) { console.error(err); res.status(500).json({ error: '옷장 조회 실패' }); }
@@ -452,13 +471,14 @@ app.get('/api/wardrobe/:customerId', async (req, res) => {
 
 app.post('/api/wardrobe', async (req, res) => {
   const { customer_id, category, style, color_id, warmth, partnerCustomerId } = req.body;
-  const partnerCustId = partnerCustomerId ? Number(partnerCustomerId) : null;
-  if (!partnerCustId) return res.status(400).json({ error: 'partnerCustomerId 필요' });
+  // customer_id(uid_xxx) 우선, 없으면 partnerCustomerId(bigint) 사용
+  const custId = await getPartnerCustomerId(customer_id || partnerCustomerId);
+  if (!custId) return res.status(400).json({ error: 'customer_id 변환 실패' });
   try {
     await pool.execute(
       `INSERT INTO wardrobe_item (customer_id, category, style, color_id, warmth, registered_date)
        VALUES (?, ?, ?, ?, ?, CURRENT_DATE)`,
-      [partnerCustId,
+      [custId,
        (category || 'TOP').toUpperCase(),
        (style    || 'CASUAL').toUpperCase(),
        color_id ?? null,
@@ -466,7 +486,7 @@ app.post('/api/wardrobe', async (req, res) => {
     );
     sendToFluentd({
       event_type:  'WARDROBE',
-      customer_id: partnerCustId,
+      customer_id: custId,
       category:    (category || '').toUpperCase(),
       style:       (style    || '').toUpperCase(),
       color_id:    color_id ?? null,
