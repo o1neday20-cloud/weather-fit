@@ -84,6 +84,7 @@ export default function ProductDetail() {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<{ name: string; hex: string } | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [loginToast, setLoginToast] = useState(false);
   const [isWished, setIsWished] = useState(false);
@@ -116,7 +117,7 @@ export default function ProductDetail() {
     const enterTime = Date.now();
     if (!id) return;
 
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
     const local = getProductById(id);
 
     // 상품 초기화 공통 처리
@@ -164,9 +165,11 @@ export default function ProductDetail() {
           isOwned: false,
         };
         initProduct(merged);
+        setIsLoading(false);
       })
       .catch(() => {
         if (local) initProduct(local);
+        setIsLoading(false);
       });
 
     return () => {
@@ -235,6 +238,17 @@ export default function ProductDetail() {
 
     setShowModal(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">상품 정보를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
