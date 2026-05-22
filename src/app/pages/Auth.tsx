@@ -380,22 +380,23 @@ export default function Auth() {
             </form>
 
           ) : (
-            <form onSubmit={handleRegister} className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+            <form onSubmit={handleRegister} className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">기본 정보</p>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
-                <input type="text" value={regForm.name}
-                  onChange={e => setRegForm({...regForm, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  placeholder="홍길동" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">생년월일 <span className="text-red-500">*</span></label>
-                <input type="date" value={regForm.birth_date}
-                  onChange={e => setRegForm({...regForm, birth_date: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">이름 <span className="text-red-500">*</span></label>
+                  <input type="text" value={regForm.name}
+                    onChange={e => setRegForm({...regForm, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="홍길동" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">생년월일 <span className="text-red-500">*</span></label>
+                  <input type="date" value={regForm.birth_date}
+                    onChange={e => setRegForm({...regForm, birth_date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                </div>
               </div>
 
               <div>
