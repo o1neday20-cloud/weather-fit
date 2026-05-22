@@ -676,9 +676,11 @@ app.post('/api/logs/behavior', async (req, res) => {
   const { customer_id, action, event_type, page_url, item_id, duration, scroll_depth } = req.body;
   // action 또는 event_type 둘 다 수용 → event_type 컬럼에 저장
   const evtType = event_type || action || null;
+  // customer_id가 uid_xxx 문자열이면 bigint로 변환 (Kafka Consumer Long.parseLong 대응)
+  const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
   try {
     const sent = await sendToKafka('weatherfit.behavior', {
-      customer_id: customer_id ?? null, event_type: evtType,
+      customer_id: custId, event_type: evtType,
       page_url: page_url ?? null, item_id: item_id ?? null,
       duration: duration ?? null, scroll_depth: scroll_depth ?? null,
     });
@@ -688,7 +690,7 @@ app.post('/api/logs/behavior', async (req, res) => {
           `INSERT INTO behavior_log
              (customer_id, event_type, page_url, item_id, duration, scroll_depth)
            VALUES (?,?,?,?,?,?)`,
-          [customer_id ?? null, evtType, page_url ?? null,
+          [custId, evtType, page_url ?? null,
            item_id ? Number(item_id) : null, duration ?? null, scroll_depth ?? null]
         );
       } catch { /* behavior_log 테이블 없으면 무시 */ }

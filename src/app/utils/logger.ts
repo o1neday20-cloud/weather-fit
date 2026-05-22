@@ -65,10 +65,10 @@ async function sendToApi(endpoint: string, payload: object): Promise<void> {
 // USE_FLUENTD=true  → Fluentd 우선, 실패 시 API 폴백
 // USE_FLUENTD=false → API 직접 전송 (기본)
 async function sendBehavior(payload: {
-  customer_id: string;
+  customer_id: number | null;
   action: ActionType;
   page_url: string;
-  item_id?: string;
+  item_id?: string | number | null;
   duration?: number;
   scroll_depth?: number;
 }) {
@@ -102,6 +102,7 @@ export class Logger {
 
   static log(eventType: string, eventData: any) {
     const userId = this.getUserId();
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
     const logEntry: LogData = {
       timestamp: new Date().toISOString(),
       userId, eventType, eventData,
@@ -113,8 +114,9 @@ export class Logger {
     this.saveLogs();
 
     // 2) 파이프라인으로 전송 (Fluentd or API)
+    // customer_id는 Kafka Consumer가 Long.parseLong()으로 처리 → 반드시 숫자
     sendBehavior({
-      customer_id:  userId,
+      customer_id:  partnerCustomerId ? Number(partnerCustomerId) : null,
       action:       toActionType(eventType),
       page_url:     window.location.href,
       item_id:      eventData?.productId ?? eventData?.itemId,
@@ -181,8 +183,9 @@ export class Logger {
 
   // ── 찜 이벤트 전송 ─────────────────────────────────────────
   static async logWishlist(productId: string, action: 'add' | 'remove') {
-    const userId = this.getUserId();
-    const payload = { customer_id: userId, product_id: productId, action };
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const custId = partnerCustomerId ? Number(partnerCustomerId) : null;
+    const payload = { customer_id: custId, product_id: productId, action };
 
     if (USE_FLUENTD) {
       const ok = await sendToFluentd('weatherfit.wishlist', payload);
@@ -190,7 +193,7 @@ export class Logger {
     }
     // wishlist는 별도 API가 처리하므로 behavior_log에만 기록
     await sendToApi('/logs/behavior', {
-      customer_id: userId,
+      customer_id: custId,
       action: action === 'add' ? 'wishlist_add' : 'wishlist_remove',
       page_url: window.location.href,
       item_id: productId,
@@ -202,9 +205,10 @@ export class Logger {
     wardrobeId: string; category: string;
     style: string; colorId?: number; warmth: number;
   }) {
-    const userId = this.getUserId();
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const custId = partnerCustomerId ? Number(partnerCustomerId) : null;
     const payload = {
-      wardrobe_id: item.wardrobeId, customer_id: userId,
+      wardrobe_id: item.wardrobeId, customer_id: custId,
       category: item.category, style: item.style,
       color_id: item.colorId ?? null, warmth: item.warmth,
     };
