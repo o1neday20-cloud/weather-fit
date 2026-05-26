@@ -82,8 +82,9 @@ function toItemId(id?: string | number | null): number | null {
 }
 
 // ── 파이프라인 선택 전송 ──────────────────────────────────────
-// USE_FLUENTD=true  → Fluentd 우선, 실패 시 API 폴백
-// USE_FLUENTD=false → API 직접 전송 (기본)
+// 항상 API(/logs/behavior)로 전송 → DB 저장 + Kafka 포워딩 보장
+// VITE_USE_FLUENTD=true 이면 Fluentd에도 추가 전송 (Kafka 직접 파이프라인)
+// Fluentd 성공 여부와 무관하게 API는 항상 호출됨
 async function sendBehavior(payload: {
   customer_id:  number | null;
   action:       ActionType;
@@ -92,12 +93,13 @@ async function sendBehavior(payload: {
   duration?:    number;          // 초 단위
   scroll_depth?: number;         // 0~100 정수
 }) {
-  if (USE_FLUENTD) {
-    const ok = await sendToFluentd('weatherfit.behavior', payload);
-    if (ok) return;
-  }
-  // 폴백: API 서버 직접 호출 (서버가 Kafka로 포워딩)
+  // 1) API 서버 항상 전송 (DB 직접 저장 + 서버 Kafka 포워딩)
   await sendToApi('/logs/behavior', payload);
+
+  // 2) Fluentd 추가 전송 (Kafka 직접 파이프라인 — 실패해도 무시)
+  if (USE_FLUENTD) {
+    sendToFluentd('weatherfit.behavior', payload); // fire-and-forget
+  }
 }
 
 function toActionType(eventType: string): ActionType {
