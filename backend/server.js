@@ -63,6 +63,18 @@ async function getPartnerCustomerId(customerId) {
   return rows.length ? rows[0].id : null;
 }
 
+// ── purchase.status 정규화 ────────────────────────────────────
+// DB 저장 형식: WISHLIST / CART / PURCHASED (항상 대문자)
+function normalizeStatus(status) {
+  const map = {
+    wishlist:  'WISHLIST',  WISHLIST:  'WISHLIST',
+    cart:      'CART',      CART:      'CART',
+    paid:      'PURCHASED', PAID:      'PURCHASED',
+    purchased: 'PURCHASED', PURCHASED: 'PURCHASED',
+  };
+  return map[status] || String(status || '').toUpperCase();
+}
+
 // ── Fluentd 전송 ──────────────────────────────────────────────
 const FLUENTD_URL = process.env.FLUENTD_URL || 'http://210.104.76.135:9880/weatherfit.log';
 
@@ -390,7 +402,7 @@ app.get('/api/coupons/my/:customerId', async (req, res) => {
 
 // ================================================================
 // WISHLIST (찜)
-// purchase 테이블 status='wishlist' 사용
+// purchase 테이블 status='WISHLIST' 사용 (대문자 통일)
 // customer_id: uid(문자) → getPartnerCustomerId()로 bigint 변환
 // product_id:  prod_N → toPartnerId()로 bigint 변환
 // purchased_at(datetime) 사용
@@ -406,7 +418,7 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
               p.product_name AS name, p.brand, p.image_url, p.price
        FROM purchase pu
        JOIN product p ON pu.product_id = p.id
-       WHERE pu.customer_id = ? AND pu.status = 'wishlist'
+       WHERE pu.customer_id = ? AND pu.status = 'WISHLIST'
        ORDER BY pu.purchased_at DESC`,
       [custId]
     );
@@ -433,14 +445,14 @@ app.post('/api/wishlist', async (req, res) => {
     }
 
     const [exist] = await pool.execute(
-      `SELECT id FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'wishlist'`,
+      `SELECT id FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
       [custId, partnerProductId]
     );
     if (exist.length > 0) return res.json({ success: true, duplicate: true });
 
     await pool.execute(
       `INSERT INTO purchase (customer_id, product_id, price, size, status, purchased_at)
-       VALUES (?, ?, 0, NULL, 'wishlist', NOW())`,
+       VALUES (?, ?, 0, NULL, 'WISHLIST', NOW())`,
       [custId, partnerProductId]
     );
 
@@ -461,7 +473,7 @@ app.delete('/api/wishlist/:customerId/:productId', async (req, res) => {
     if (!custId) return res.status(400).json({ error: 'customer 없음' });
     const partnerProductId = toPartnerId(req.params.productId);
     await pool.execute(
-      `DELETE FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'wishlist'`,
+      `DELETE FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
       [custId, partnerProductId]
     );
     res.json({ success: true });
@@ -543,7 +555,7 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
               p.product_name AS name, p.brand, p.image_url, p.price AS list_price
        FROM purchase pu
        JOIN product p ON pu.product_id = p.id
-       WHERE pu.customer_id = ? AND pu.status = 'cart'`,
+       WHERE pu.customer_id = ? AND pu.status = 'CART'`,
       [req.params.customerId]
     );
     res.json(rows);
@@ -566,17 +578,18 @@ app.post('/api/purchase', async (req, res) => {
       return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
     }
 
-    const currentStatus = status || 'cart';
+    // status 정규화: 'paid'→'PURCHASED', 'cart'→'CART' (대문자 통일)
+    const currentStatus = normalizeStatus(status || 'CART');
 
-    if (currentStatus === 'paid') {
+    if (currentStatus === 'PURCHASED') {
       const sent = await sendToKafka('weatherfit.purchase', {
         customer_id: partnerCustId, product_id: partnerProductId,
-        status: 'paid', size: size || null, price,
+        status: 'PURCHASED', size: size || null, price,
       });
       if (!sent) {
         await pool.execute(
           `INSERT INTO purchase (customer_id, product_id, price, size, status, purchased_at)
-           VALUES (?, ?, ?, ?, 'paid', NOW())`,
+           VALUES (?, ?, ?, ?, 'PURCHASED', NOW())`,
           [partnerCustId, partnerProductId, price, size || null]
         );
       }
@@ -589,10 +602,10 @@ app.post('/api/purchase', async (req, res) => {
         timestamp:   new Date().toISOString(),
       });
     } else {
-      if (currentStatus === 'cart') {
+      if (currentStatus === 'CART') {
         const [existing] = await pool.execute(
           `SELECT id FROM purchase
-           WHERE customer_id = ? AND product_id = ? AND size = ? AND status = 'cart'`,
+           WHERE customer_id = ? AND product_id = ? AND size = ? AND status = 'CART'`,
           [partnerCustId, partnerProductId, size]
         );
         if (existing.length > 0) return res.json({ success: true, duplicate: true });
@@ -617,8 +630,9 @@ app.post('/api/purchase', async (req, res) => {
 
 app.patch('/api/purchase/:purchaseId/status', async (req, res) => {
   const { status } = req.body;
+  const dbStatus = normalizeStatus(status); // 대문자 통일: CART / PURCHASED / WISHLIST
   try {
-    await pool.execute('UPDATE purchase SET status = ? WHERE id = ?', [status, req.params.purchaseId]);
+    await pool.execute('UPDATE purchase SET status = ? WHERE id = ?', [dbStatus, req.params.purchaseId]);
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '상태 변경 실패' }); }
 });
@@ -784,10 +798,10 @@ function adminAuth(req, res, next) {
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
   try {
     const [[customers]] = await pool.execute('SELECT COUNT(*) as cnt FROM customer');
-    const [[purchases]] = await pool.execute("SELECT COUNT(*) as cnt FROM purchase WHERE status='paid'");
-    const [[wishlist]]  = await pool.execute("SELECT COUNT(*) as cnt FROM purchase WHERE status='wishlist'");
+    const [[purchases]] = await pool.execute("SELECT COUNT(*) as cnt FROM purchase WHERE status='PURCHASED'");
+    const [[wishlist]]  = await pool.execute("SELECT COUNT(*) as cnt FROM purchase WHERE status='WISHLIST'");
     const [[feedbacks]] = await pool.execute('SELECT COUNT(*) as cnt FROM temperature_feedback');
-    const [[revenue]]   = await pool.execute("SELECT COALESCE(SUM(price),0) as total FROM purchase WHERE status='paid'");
+    const [[revenue]]   = await pool.execute("SELECT COALESCE(SUM(price),0) as total FROM purchase WHERE status='PURCHASED'");
     res.json({
       totalCustomers: customers.cnt,
       totalPurchases: purchases.cnt,
@@ -808,7 +822,7 @@ app.get('/api/admin/revenue', adminAuth, async (req, res) => {
                   :                        "DATE_FORMAT(purchased_at,'%Y-%m-%d')";
     const [rows] = await pool.execute(
       `SELECT ${groupBy} as label, SUM(price) as revenue, COUNT(*) as count
-       FROM purchase WHERE status='paid'
+       FROM purchase WHERE status='PURCHASED'
        GROUP BY label ORDER BY label DESC LIMIT 30`
     );
     res.json(rows.reverse());
@@ -929,7 +943,7 @@ app.get('/api/admin/purchase/stats', adminAuth, async (req, res) => {
               COUNT(*) as count, SUM(pu.price) as revenue
        FROM purchase pu
        JOIN product p ON pu.product_id = p.id
-       WHERE pu.status='paid'
+       WHERE pu.status='PURCHASED'
        GROUP BY pu.product_id ORDER BY count DESC LIMIT 10`
     );
     res.json({ byStatus, topProducts });
