@@ -61,16 +61,36 @@ async function sendToApi(endpoint: string, payload: object): Promise<void> {
   }
 }
 
+// ── partnerCustomerId(bigint) 안전 취득 ──────────────────────
+// Kafka Consumer가 Long.parseLong()으로 처리 → 반드시 숫자
+// 비로그인(anon_) 또는 미설정이면 null 반환
+function getPartnerCustId(): number | null {
+  const raw    = localStorage.getItem('partnerCustomerId');
+  const userId = localStorage.getItem('userId');
+  // anon_ 사용자 or 미로그인이면 null
+  if (!raw || userId?.startsWith('anon_')) return null;
+  const n = Number(raw);
+  return isNaN(n) ? null : n;
+}
+
+// ── item_id 숫자 변환: 'prod_N' → N ──────────────────────────
+// behavior_log.item_id 컬럼이 bigint → 숫자로만 전송
+function toItemId(id?: string | number | null): number | null {
+  if (id == null) return null;
+  const n = Number(String(id).replace(/^prod_/i, ''));
+  return isNaN(n) || n === 0 ? null : n;
+}
+
 // ── 파이프라인 선택 전송 ──────────────────────────────────────
 // USE_FLUENTD=true  → Fluentd 우선, 실패 시 API 폴백
 // USE_FLUENTD=false → API 직접 전송 (기본)
 async function sendBehavior(payload: {
-  customer_id: number | null;
-  action: ActionType;
-  page_url: string;
-  item_id?: string | number | null;
-  duration?: number;
-  scroll_depth?: number;
+  customer_id:  number | null;
+  action:       ActionType;
+  page_url:     string;
+  item_id?:     number | null;   // bigint 숫자만 (DB behavior_log.item_id 타입 일치)
+  duration?:    number;          // 초 단위
+  scroll_depth?: number;         // 0~100 정수
 }) {
   if (USE_FLUENTD) {
     const ok = await sendToFluentd('weatherfit.behavior', payload);
@@ -102,7 +122,6 @@ export class Logger {
 
   static log(eventType: string, eventData: any) {
     const userId = this.getUserId();
-    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
     const logEntry: LogData = {
       timestamp: new Date().toISOString(),
       userId, eventType, eventData,
@@ -114,14 +133,15 @@ export class Logger {
     this.saveLogs();
 
     // 2) 파이프라인으로 전송 (Fluentd or API)
-    // customer_id는 Kafka Consumer가 Long.parseLong()으로 처리 → 반드시 숫자
+    const rawDuration   = eventData?.duration    ?? eventData?.duration_sec;
+    const rawScroll     = eventData?.scrollDepth ?? eventData?.scroll_depth;
     sendBehavior({
-      customer_id:  partnerCustomerId ? Number(partnerCustomerId) : null,
+      customer_id:  getPartnerCustId(),                         // partnerCustomerId(bigint), anon_→null
       action:       toActionType(eventType),
       page_url:     window.location.href,
-      item_id:      eventData?.productId ?? eventData?.itemId,
-      duration:     eventData?.duration,
-      scroll_depth: eventData?.scrollDepth,
+      item_id:      toItemId(eventData?.productId ?? eventData?.itemId), // 'prod_N'→N 숫자 변환
+      duration:     rawDuration  != null ? Math.round(rawDuration)  : undefined, // 초, 정수
+      scroll_depth: rawScroll    != null ? Math.round(rawScroll)    : undefined, // 0~100 정수
     });
   }
 
@@ -183,9 +203,9 @@ export class Logger {
 
   // ── 찜 이벤트 전송 ─────────────────────────────────────────
   static async logWishlist(productId: string, action: 'add' | 'remove') {
-    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
-    const custId = partnerCustomerId ? Number(partnerCustomerId) : null;
-    const payload = { customer_id: custId, product_id: productId, action };
+    const custId    = getPartnerCustId();
+    const numItemId = toItemId(productId); // 'prod_N' → N
+    const payload   = { customer_id: custId, product_id: numItemId, action };
 
     if (USE_FLUENTD) {
       const ok = await sendToFluentd('weatherfit.wishlist', payload);
@@ -194,9 +214,9 @@ export class Logger {
     // wishlist는 별도 API가 처리하므로 behavior_log에만 기록
     await sendToApi('/logs/behavior', {
       customer_id: custId,
-      action: action === 'add' ? 'wishlist_add' : 'wishlist_remove',
-      page_url: window.location.href,
-      item_id: productId,
+      action:      action === 'add' ? 'wishlist_add' : 'wishlist_remove',
+      page_url:    window.location.href,
+      item_id:     numItemId, // 숫자 bigint
     });
   }
 
@@ -205,8 +225,7 @@ export class Logger {
     wardrobeId: string; category: string;
     style: string; colorId?: number; warmth: number;
   }) {
-    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
-    const custId = partnerCustomerId ? Number(partnerCustomerId) : null;
+    const custId = getPartnerCustId();
     const payload = {
       wardrobe_id: item.wardrobeId, customer_id: custId,
       category: item.category, style: item.style,
