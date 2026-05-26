@@ -714,28 +714,31 @@ app.post('/api/feedback', async (req, res) => {
 app.post('/api/logs/behavior', async (req, res) => {
   const { customer_id, action, event_type, page_url, item_id, duration, scroll_depth } = req.body;
   // action 또는 event_type 둘 다 수용 → event_type 컬럼에 소문자로 저장
-  const evtType = (event_type || action || null)?.toLowerCase() ?? null;
-  // customer_id가 uid_xxx 문자열이면 bigint로 변환 (Kafka Consumer Long.parseLong 대응)
-  const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
+  const evtType = (event_type || action || 'page_view').toLowerCase();
   try {
+    // getPartnerCustomerId를 try 안으로 이동 → 외부 throw 방지 (404처럼 보이는 에러 차단)
+    const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
+
     const sent = await sendToKafka('weatherfit.behavior', {
       customer_id: custId, event_type: evtType,
       page_url: page_url ?? null, item_id: item_id ?? null,
       duration: duration ?? null, scroll_depth: scroll_depth ?? null,
     });
     if (!sent) {
-      try {
-        await pool.execute(
-          `INSERT INTO behavior_log
-             (customer_id, event_type, page_url, item_id, duration, scroll_depth)
-           VALUES (?,?,?,?,?,?)`,
-          [custId, evtType, page_url ?? null,
-           item_id ? Number(item_id) : null, duration ?? null, scroll_depth ?? null]
-        );
-      } catch { /* behavior_log 테이블 없으면 무시 */ }
+      // Kafka 미연결 → DB 직접 저장
+      await pool.execute(
+        `INSERT INTO behavior_log
+           (customer_id, event_type, page_url, item_id, duration, scroll_depth)
+         VALUES (?,?,?,?,?,?)`,
+        [custId ?? null, evtType, page_url ?? null,
+         item_id ? Number(item_id) : null, duration ?? null, scroll_depth ?? null]
+      );
     }
     res.json({ success: true, via: sent ? 'kafka' : 'direct' });
-  } catch (err) { console.error(err); res.status(500).json({ error: '로그 저장 실패' }); }
+  } catch (err) {
+    console.error('[behavior POST]', err.message);
+    res.status(500).json({ error: '로그 저장 실패' });
+  }
 });
 
 app.post('/api/logs/success', async (req, res) => {

@@ -68,7 +68,7 @@ export default function Outfit() {
 
       Logger.log('outfit_generated', {
         feelTemperature: tempPrediction.perceived,
-        outfitCount: outfit.length,
+        outfitCount: outfitResult.items.length,  // outfit → outfitResult.items (정의된 변수 사용)
         suggestionsCount: suggestions.length,
         location: weatherData.location,
       });
