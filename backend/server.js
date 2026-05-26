@@ -284,19 +284,23 @@ app.get('/api/products', async (req, res) => {
 });
 
 app.get('/api/products/:id', async (req, res) => {
-  try {
-    const partnerId = toPartnerId(req.params.id);
-    if (!partnerId) return res.status(404).json({ error: '상품 없음' });
+  // prod_11 또는 11 형태 모두 수용 → 숫자 변환
+  const numericId = parseInt(String(req.params.id).replace(/^prod_/i, ''), 10);
+  if (isNaN(numericId)) return res.status(400).json({ error: '잘못된 상품 ID' });
 
-    const [rows] = await pool.execute('SELECT * FROM product WHERE id = ?', [partnerId]);
+  const partnerCustId = req.query.partnerCustomerId
+    ? Number(req.query.partnerCustomerId)
+    : null;
+
+  try {
+    const [rows] = await pool.execute('SELECT * FROM product WHERE id = ?', [numericId]);
     if (!rows.length) return res.status(404).json({ error: '상품 없음' });
 
-    // VIEW 이벤트 → Fluentd
-    const viewCid = req.query.partnerCustomerId ? Number(req.query.partnerCustomerId) : null;
+    // VIEW 이벤트 → Fluentd (fire-and-forget)
     sendToFluentd({
-      event_type: 'VIEW',
-      customer_id: viewCid,
-      product_id:  partnerId,
+      event_type:  'VIEW',
+      customer_id: partnerCustId,
+      product_id:  numericId,
       timestamp:   new Date().toISOString(),
     });
 
