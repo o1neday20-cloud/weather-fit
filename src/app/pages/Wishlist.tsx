@@ -63,12 +63,17 @@ export default function Wishlist() {
       try {
         const res = await fetch(`${API_BASE}/wishlist/${apiId}`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
-          const apiItems: WishItem[] = await res.json();
-          // API 결과 + localStorage 병합 (중복 product_id 제거)
-          // 서버는 product_id를 'prod_N' 포맷으로 반환 → localStorage와 타입 일치
+          // API는 product_id를 숫자(27)로 반환 → 'prod_27' 포맷으로 정규화
+          const normId = (id: any): string =>
+            String(id).startsWith('prod_') ? String(id) : `prod_${id}`;
+          const apiItems: WishItem[] = (await res.json()).map((item: any) => ({
+            ...item,
+            product_id: normId(item.product_id),
+          }));
+          // API + localStorage 병합 (중복 product_id 제거)
           const apiIds = new Set(apiItems.map(a => String(a.product_id)));
           const localOnly = localItems.filter(local => {
-            const localId = String((local as any).product_id || (local as any).id);
+            const localId = normId((local as any).product_id || (local as any).id);
             return !apiIds.has(localId);
           });
           setItems([...apiItems, ...localOnly].map(enrichImageUrl));

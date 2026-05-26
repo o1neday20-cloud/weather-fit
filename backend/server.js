@@ -476,16 +476,19 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
        ORDER BY pu.purchased_at DESC`,
       [custId]
     );
-    // product_id를 'prod_N' 포맷으로 변환 (프론트 localStorage와 타입 통일)
-    res.json(rows.map(row => ({ ...row, product_id: `prod_${row.product_id}` })));
+    // product_id: p.id 숫자 그대로 반환
+    res.json(rows.map(row => ({ ...row, product_id: Number(row.product_id) })));
   } catch (err) { console.error(err); res.status(500).json({ error: '찜 목록 조회 실패' }); }
 });
 
 app.post('/api/wishlist', async (req, res) => {
   const { customer_id, product_id, partnerCustomerId } = req.body;
   try {
-    // 1) customer_id(uid_xxx 또는 bigint) → 숫자 변환 (try 안에서 수행)
-    const custId = await getPartnerCustomerId(customer_id || partnerCustomerId);
+    // 1) partnerCustomerId(숫자)가 있으면 직접 사용, 없으면 uid → DB 조회
+    //    → 변환된 숫자 custId로 중복 체크 및 INSERT
+    const custId = partnerCustomerId
+      ? Number(partnerCustomerId)
+      : await getPartnerCustomerId(customer_id);
     const partnerProductId = toPartnerId(product_id);
 
     if (!custId || !partnerProductId) {
