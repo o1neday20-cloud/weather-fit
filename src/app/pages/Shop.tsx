@@ -6,7 +6,7 @@ import { mockProducts, Product } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { ShoppingBag, Search, X, CheckCircle, Heart } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 function wishlistKey(): string {
   const userId = localStorage.getItem('userId');
   if (userId && !userId.startsWith('anon_')) return `wishlist_${userId}`;
@@ -151,6 +151,7 @@ export default function Shop() {
       const stored: any[] = JSON.parse(localStorage.getItem(wishlistKey()) || '[]');
       localStorage.setItem(wishlistKey(), JSON.stringify(stored.filter((i: any) => (i.product_id||i.id) !== product.id)));
       if (userId) fetch(`${API_BASE}/wishlist/${userId}/${product.id}`, { method: 'DELETE' }).catch(() => {});
+      Logger.log('wishlist_remove', { productId: product.id });
     } else {
       next.add(product.id);
       setWishlist(next);
@@ -169,7 +170,7 @@ export default function Shop() {
           }),
         }).catch(() => {});
       }
-      Logger.log('product_view', { productId: product.id, action: 'wishlist_add' });
+      Logger.log('wishlist_add', { productId: product.id });
     }
   };
 
@@ -284,7 +285,12 @@ export default function Shop() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (e.target.value.trim()) {
+                  Logger.log('search', { keyword: e.target.value });
+                }
+              }}
               placeholder="상품명 또는 브랜드 검색"
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />

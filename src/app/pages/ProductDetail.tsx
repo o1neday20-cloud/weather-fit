@@ -110,7 +110,7 @@ export default function ProductDetail() {
       localStorage.setItem(wishlistKey(), JSON.stringify(stored));
       setIsWished(true);
     }
-    Logger.log('product_view', { productId: product.id, action: isWished ? 'wishlist_remove' : 'wishlist_add' });
+    Logger.log(isWished ? 'wishlist_remove' : 'wishlist_add', { productId: product.id });
   };
 
   useEffect(() => {
