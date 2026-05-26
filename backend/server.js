@@ -54,13 +54,23 @@ function toPartnerId(productId) {
 }
 
 // ── customer uid → bigint id 변환 헬퍼 ───────────────────────
-// 숫자 문자열이면 그대로 Number 반환,
-// uid_xxx 형태면 DB에서 id 조회 후 반환
+// 숫자(69)         → 그대로 Number 반환
+// uid_xxx          → DB에서 id 조회 후 반환
+// anon_xxx / 기타  → null 반환 (DB 조회 하지 않음)
 async function getPartnerCustomerId(customerId) {
   if (!customerId) return null;
-  if (/^\d+$/.test(String(customerId))) return Number(customerId);
-  const [rows] = await pool.execute('SELECT id FROM customer WHERE uid = ?', [customerId]);
-  return rows.length ? rows[0].id : null;
+  const str = String(customerId);
+  // 순수 숫자 → bigint id 그대로 반환
+  if (/^\d+$/.test(str)) return Number(str);
+  // anon_ 비로그인 식별자 → null
+  if (str.startsWith('anon_')) return null;
+  // uid_xxx → DB에서 customer.id(bigint) 조회
+  if (str.startsWith('uid_')) {
+    const [rows] = await pool.execute('SELECT id FROM customer WHERE uid = ?', [str]);
+    return rows.length ? rows[0].id : null;
+  }
+  // 그 외 알 수 없는 형식 → null
+  return null;
 }
 
 // ── purchase.status 정규화 ────────────────────────────────────
