@@ -5,7 +5,7 @@ import { Logger } from '../utils/logger';
 import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag, Package } from 'lucide-react';
 import { getMembershipInfo } from '../utils/membership';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
 const MEMBERSHIP_INFO: Record<string, { label: string; color: string; nextAt: number | null; benefit: string }> = {
   BASIC:  { label: 'BASIC',  color: '#9CA3AF', nextAt: 100000,  benefit: '기본 서비스 이용' },
@@ -21,6 +21,7 @@ export default function MyPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [membershipLevel, setMembershipLevel] = useState<string>('BASIC');
+  const [couponCount, setCouponCount] = useState<number>(0);
   const [prefs, setPrefs] = useState({
     cold_sensitivity: 0,
     activity_level: 'medium',
@@ -50,6 +51,11 @@ export default function MyPage() {
         .catch(() => {
           if (p.membership_level) setMembershipLevel(p.membership_level);
         });
+      // 쿠폰 수 로드
+      fetch(`${API_BASE}/coupons/my/${userId}`, { signal: AbortSignal.timeout(3000) })
+        .then(r => r.ok ? r.json() : [])
+        .then((coupons: any[]) => setCouponCount(Array.isArray(coupons) ? coupons.length : 0))
+        .catch(() => {});
     } else if (userId) {
       // userId는 있지만 profile 없음 (게스트 자동 ID)
       setIsLoggedIn(false);
@@ -200,6 +206,11 @@ export default function MyPage() {
               <div className="flex items-center gap-3">
                 <Ticket className="w-5 h-5 text-blue-400" />
                 <span className="text-sm font-medium text-gray-800">내 쿠폰</span>
+                {couponCount > 0 && (
+                  <span className="px-2 py-0.5 bg-blue-600 text-white text-[11px] font-bold rounded-full">
+                    {couponCount}장
+                  </span>
+                )}
               </div>
               <ChevronRight className="w-4 h-4 text-gray-400" />
             </Link>

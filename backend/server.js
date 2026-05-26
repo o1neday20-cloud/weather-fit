@@ -399,19 +399,59 @@ app.get('/api/coupons/validate', async (req, res) => {
   } catch { res.status(200).json({ error: '쿠폰 기능 미지원' }); }
 });
 
+// ── 쿠폰 발급 프록시 (팀원 캠페인 API → localhost:8080) ─────────
+app.post('/api/coupons/issue-campaign', async (req, res) => {
+  const { campaign_id, customer_id } = req.body;
+  if (!campaign_id || !customer_id)
+    return res.status(400).json({ error: 'campaign_id, customer_id 필요' });
+  try {
+    const response = await axios.post(
+      `http://localhost:8080/api/campaigns/${campaign_id}/issue-coupons`,
+      { customerIds: [customer_id] }
+    );
+    res.json(response.data);
+  } catch (err) {
+    console.error('[issue-campaign]', err.response?.data || err.message);
+    res.status(err.response?.status || 500).json({
+      error: '쿠폰 발급 실패',
+      detail: err.response?.data || err.message,
+    });
+  }
+});
+
+// ── 내 쿠폰 목록 조회 ─────────────────────────────────────────
+// coupon 테이블 실제 컬럼: type, min_order_amount, max_discount_amount, expired_at(customer_coupon)
+// code 컬럼 없음 → coupon_id를 code로 사용
+// discount_type: DB 'AMOUNT'/'PERCENT' → 프론트 'amount'/'percent' 소문자 변환
 app.get('/api/coupons/my/:customerId', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT cc.*, c.code, c.name, c.discount_type, c.discount_value,
-              c.min_order_amt, c.max_discount, c.valid_from, c.valid_until
-       FROM customer_coupon cc JOIN coupon c ON cc.coupon_id = c.coupon_id
+      `SELECT cc.coupon_id,
+              c.name,
+              c.type                AS discount_type,
+              c.discount_value,
+              c.min_order_amount    AS min_order_amt,
+              c.max_discount_amount AS max_discount,
+              cc.issued_at          AS valid_from,
+              cc.expired_at         AS valid_until
+       FROM customer_coupon cc
+       JOIN coupon c ON cc.coupon_id = c.coupon_id
        WHERE cc.customer_id = ? AND cc.used_at IS NULL
-         AND c.is_active = 1 AND c.valid_until >= CURRENT_DATE
-       ORDER BY c.valid_until ASC`,
+         AND cc.status = 'ACTIVE' AND cc.expired_at >= CURRENT_DATE
+         AND c.status = 'ACTIVE'
+       ORDER BY cc.expired_at ASC`,
       [req.params.customerId]
     );
-    res.json(rows);
-  } catch { res.json([]); }
+    const result = rows.map(r => ({
+      ...r,
+      code:          r.coupon_id,                           // coupon 테이블에 code 컬럼 없음
+      discount_type: (r.discount_type || '').toLowerCase(), // 'AMOUNT'→'amount'
+    }));
+    res.json(result);
+  } catch (err) {
+    console.error('[coupons/my]', err.message);
+    res.json([]);
+  }
 });
 
 // ================================================================
