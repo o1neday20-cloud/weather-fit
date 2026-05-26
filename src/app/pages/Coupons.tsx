@@ -102,12 +102,10 @@ export default function Coupons() {
                         <Tag className="w-5 h-5 mx-auto mb-1 opacity-75" />
                         <div className="text-lg font-bold leading-tight">
                           {c.discount_type === 'amount'
-                            ? `${(c.discount_value / 1000).toFixed(0)}K`
+                            ? c.discount_value.toLocaleString('ko-KR') + '원'
                             : `${c.discount_value}%`}
                         </div>
-                        <div className="text-[10px] opacity-75">
-                          {c.discount_type === 'amount' ? '원 할인' : '할인'}
-                        </div>
+                        <div className="text-[10px] opacity-75">할인</div>
                       </div>
                     </div>
 
