@@ -81,6 +81,23 @@ function toItemId(id?: string | number | null): number | null {
   return isNaN(n) || n === 0 ? null : n;
 }
 
+// ── 페이지 체류 시간 측정 ──────────────────────────────────────
+// page_view 이벤트 시 리셋, 이후 이벤트에서 경과 초 반환
+let _pageStartedAt: number = Date.now();
+
+// 현재 스크롤 깊이 (0~100 정수)
+// window.scrollY / document.body.scrollHeight * 100
+function measureScrollDepth(): number {
+  const total = document.body.scrollHeight;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((window.scrollY / total) * 100));
+}
+
+// 페이지 진입 후 경과 시간 (초, 정수)
+function measureDuration(): number {
+  return Math.max(0, Math.round((Date.now() - _pageStartedAt) / 1000));
+}
+
 // ── 파이프라인 선택 전송 ──────────────────────────────────────
 // 항상 API(/logs/behavior)로 전송 → DB 저장 + Kafka 포워딩 보장
 // VITE_USE_FLUENTD=true 이면 Fluentd에도 추가 전송 (Kafka 직접 파이프라인)
@@ -124,6 +141,12 @@ export class Logger {
 
   static log(eventType: string, eventData: any) {
     const userId = this.getUserId();
+
+    // page_view: 새 페이지 진입 → 체류 시간 타이머 리셋
+    if (eventType === 'page_view') {
+      _pageStartedAt = Date.now();
+    }
+
     const logEntry: LogData = {
       timestamp: new Date().toISOString(),
       userId, eventType, eventData,
@@ -135,15 +158,24 @@ export class Logger {
     this.saveLogs();
 
     // 2) 파이프라인으로 전송 (Fluentd or API)
+    // page_view·product_view: eventData에 값 없으면 실측값 자동 사용
+    const AUTO_MEASURE  = ['page_view', 'product_view'];
+    const shouldMeasure = AUTO_MEASURE.includes(eventType);
     const rawDuration   = eventData?.duration    ?? eventData?.duration_sec;
     const rawScroll     = eventData?.scrollDepth ?? eventData?.scroll_depth;
+
     sendBehavior({
-      customer_id:  getPartnerCustId(),                         // partnerCustomerId(bigint), anon_→null
+      customer_id:  getPartnerCustId(),
       action:       toActionType(eventType),
       page_url:     window.location.href,
-      item_id:      toItemId(eventData?.productId ?? eventData?.itemId), // 'prod_N'→N 숫자 변환
-      duration:     rawDuration  != null ? Math.round(rawDuration)  : undefined, // 초, 정수
-      scroll_depth: rawScroll    != null ? Math.round(rawScroll)    : undefined, // 0~100 정수
+      item_id:      toItemId(eventData?.productId ?? eventData?.itemId),
+      // eventData에 값 있으면 우선 사용, 없으면 자동 측정 (page_view·product_view만)
+      duration:     rawDuration  != null ? Math.round(rawDuration)
+                  : shouldMeasure        ? measureDuration()
+                  : undefined,
+      scroll_depth: rawScroll    != null ? Math.round(rawScroll)
+                  : shouldMeasure        ? measureScrollDepth()
+                  : undefined,
     });
   }
 
