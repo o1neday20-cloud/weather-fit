@@ -13,9 +13,9 @@ const FLUENTD_URL   = import.meta.env.VITE_FLUENTD_URL  || 'http://localhost:242
 const USE_FLUENTD   = import.meta.env.VITE_USE_FLUENTD  === 'true';
 
 export type ActionType =
-  | 'page_view' | 'product_view' | 'add_to_cart' | 'purchase'
-  | 'outfit_view' | 'feedback' | 'search' | 'wardrobe_add'
-  | 'wishlist_add' | 'wishlist_remove' | 'coupon_apply';
+  | 'PAGE_VIEW' | 'PRODUCT_VIEW' | 'ADD_TO_CART' | 'PURCHASE'
+  | 'OUTFIT_VIEW' | 'FEEDBACK' | 'SEARCH' | 'WARDROBE_ADD'
+  | 'WISHLIST_ADD' | 'WISHLIST_REMOVE' | 'COUPON_APPLY';
 
 export interface LogData {
   timestamp: string;
@@ -86,11 +86,11 @@ function toItemId(id?: string | number | null): number | null {
 let _pageStartedAt: number = Date.now();
 
 // 현재 스크롤 깊이 (0~100 정수)
-// window.scrollY / document.body.scrollHeight * 100
+// window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100
 function measureScrollDepth(): number {
-  const total = document.body.scrollHeight;
-  if (total <= 0) return 0;
-  return Math.min(100, Math.round((window.scrollY / total) * 100));
+  const scrollable = document.body.scrollHeight - window.innerHeight;
+  if (scrollable <= 0) return 0;
+  return Math.min(100, Math.round((window.scrollY / scrollable) * 100));
 }
 
 // 페이지 진입 후 경과 시간 (초, 정수)
@@ -121,19 +121,19 @@ async function sendBehavior(payload: {
 
 function toActionType(eventType: string): ActionType {
   const map: Record<string, ActionType> = {
-    page_view:          'page_view',
-    product_view:       'product_view',
-    add_to_cart:        'add_to_cart',
-    purchase_completed: 'purchase',
-    outfit_generated:   'outfit_view',
-    forecast_selected:  'outfit_view',
-    feedback_submitted: 'feedback',
-    search:             'search',
-    item_added:         'wardrobe_add',
-    wishlist_add:       'wishlist_add',
-    wishlist_remove:    'wishlist_remove',
+    page_view:          'PAGE_VIEW',
+    product_view:       'PRODUCT_VIEW',
+    add_to_cart:        'ADD_TO_CART',
+    purchase_completed: 'PURCHASE',
+    outfit_generated:   'OUTFIT_VIEW',
+    forecast_selected:  'OUTFIT_VIEW',
+    feedback_submitted: 'FEEDBACK',
+    search:             'SEARCH',
+    item_added:         'WARDROBE_ADD',
+    wishlist_add:       'WISHLIST_ADD',
+    wishlist_remove:    'WISHLIST_REMOVE',
   };
-  return map[eventType] ?? 'page_view';
+  return map[eventType] ?? 'PAGE_VIEW';
 }
 
 export class Logger {
@@ -142,7 +142,21 @@ export class Logger {
   static log(eventType: string, eventData: any) {
     const userId = this.getUserId();
 
-    // page_view: 새 페이지 진입 → 체류 시간 타이머 리셋
+    // 타이머 리셋 전에 측정값 먼저 확정
+    // page_view duration = 이전 페이지 체류 시간 (리셋 전 측정해야 0이 안 됨)
+    const AUTO_MEASURE  = ['page_view', 'product_view'];
+    const shouldMeasure = AUTO_MEASURE.includes(eventType);
+    const rawDuration   = eventData?.duration    ?? eventData?.duration_sec;
+    const rawScroll     = eventData?.scrollDepth ?? eventData?.scroll_depth;
+
+    const computedDuration = rawDuration  != null ? Math.round(rawDuration)
+                           : shouldMeasure        ? measureDuration()
+                           : undefined;
+    const computedScroll   = rawScroll    != null ? Math.round(rawScroll)
+                           : shouldMeasure        ? measureScrollDepth()
+                           : undefined;
+
+    // page_view: duration 계산 후 타이머 리셋 (다음 페이지 체류 시간 측정 시작)
     if (eventType === 'page_view') {
       _pageStartedAt = Date.now();
     }
@@ -158,24 +172,13 @@ export class Logger {
     this.saveLogs();
 
     // 2) 파이프라인으로 전송 (Fluentd or API)
-    // page_view·product_view: eventData에 값 없으면 실측값 자동 사용
-    const AUTO_MEASURE  = ['page_view', 'product_view'];
-    const shouldMeasure = AUTO_MEASURE.includes(eventType);
-    const rawDuration   = eventData?.duration    ?? eventData?.duration_sec;
-    const rawScroll     = eventData?.scrollDepth ?? eventData?.scroll_depth;
-
     sendBehavior({
       customer_id:  getPartnerCustId(),
       action:       toActionType(eventType),
       page_url:     window.location.href,
       item_id:      toItemId(eventData?.productId ?? eventData?.itemId),
-      // eventData에 값 있으면 우선 사용, 없으면 자동 측정 (page_view·product_view만)
-      duration:     rawDuration  != null ? Math.round(rawDuration)
-                  : shouldMeasure        ? measureDuration()
-                  : undefined,
-      scroll_depth: rawScroll    != null ? Math.round(rawScroll)
-                  : shouldMeasure        ? measureScrollDepth()
-                  : undefined,
+      duration:     computedDuration,
+      scroll_depth: computedScroll,
     });
   }
 
@@ -248,7 +251,7 @@ export class Logger {
     // wishlist는 별도 API가 처리하므로 behavior_log에만 기록
     await sendToApi('/logs/behavior', {
       customer_id: custId,
-      action:      action === 'add' ? 'wishlist_add' : 'wishlist_remove',
+      action:      action === 'add' ? 'WISHLIST_ADD' : 'WISHLIST_REMOVE',
       page_url:    window.location.href,
       item_id:     numItemId, // 숫자 bigint
     });

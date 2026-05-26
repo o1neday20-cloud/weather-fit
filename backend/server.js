@@ -723,8 +723,8 @@ app.post('/api/feedback', async (req, res) => {
 // ================================================================
 app.post('/api/logs/behavior', async (req, res) => {
   const { customer_id, action, event_type, page_url, item_id, duration, scroll_depth } = req.body;
-  // action 또는 event_type 둘 다 수용 → 소문자 통일
-  const dbEventType = (event_type || action || 'page_view').toLowerCase();
+  // action 또는 event_type 둘 다 수용 → 대문자 통일
+  const dbEventType = (event_type || action || 'PAGE_VIEW').toUpperCase();
   try {
     const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
 
