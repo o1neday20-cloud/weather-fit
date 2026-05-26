@@ -738,8 +738,8 @@ app.post('/api/logs/behavior', async (req, res) => {
     // DB 항상 직접 저장 (Kafka Consumer 없어도 데이터 보장)
     await pool.execute(
       `INSERT INTO behavior_log
-         (customer_id, event_type, page_url, item_id, duration, scroll_depth)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (customer_id, event_type, page_url, item_id, duration, scroll_depth, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
       [custId ?? null, dbEventType, page_url ?? null,
        item_id ? Number(item_id) : null, duration ?? null, scroll_depth ?? null]
     );
