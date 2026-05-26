@@ -483,14 +483,15 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 
 app.post('/api/wishlist', async (req, res) => {
   const { customer_id, product_id, partnerCustomerId } = req.body;
-  // customer_id(uid_xxx) 우선, 없으면 partnerCustomerId(bigint) 사용
-  const custId           = await getPartnerCustomerId(customer_id || partnerCustomerId);
-  const partnerProductId = toPartnerId(product_id);
-
-  if (!custId || !partnerProductId) {
-    return res.status(400).json({ error: 'customer_id 또는 product_id 변환 실패' });
-  }
   try {
+    // 1) customer_id(uid_xxx 또는 bigint) → 숫자 변환 (try 안에서 수행)
+    const custId = await getPartnerCustomerId(customer_id || partnerCustomerId);
+    const partnerProductId = toPartnerId(product_id);
+
+    if (!custId || !partnerProductId) {
+      return res.status(400).json({ error: 'customer_id 또는 product_id 변환 실패' });
+    }
+
     const [productCheck] = await pool.execute(
       'SELECT id, price FROM product WHERE id = ?', [partnerProductId]
     );
@@ -498,12 +499,15 @@ app.post('/api/wishlist', async (req, res) => {
       return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
     }
 
+    // 2) 변환된 숫자 custId로 중복 체크
     const [exist] = await pool.execute(
       `SELECT id FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
       [custId, partnerProductId]
     );
+    // 3) 중복이면 INSERT 없이 반환
     if (exist.length > 0) return res.json({ success: true, duplicate: true });
 
+    // 4) 중복 아니면 INSERT
     await pool.execute(
       `INSERT INTO purchase (customer_id, product_id, price, size, status, purchased_at)
        VALUES (?, ?, 0, NULL, 'WISHLIST', NOW())`,
@@ -518,7 +522,7 @@ app.post('/api/wishlist', async (req, res) => {
       timestamp:   new Date().toISOString(),
     });
     res.json({ success: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: '찜 추가 실패' }); }
+  } catch (err) { console.error('[wishlist POST]', err.message); res.status(500).json({ error: '찜 추가 실패' }); }
 });
 
 app.delete('/api/wishlist/:customerId/:productId', async (req, res) => {
