@@ -191,13 +191,17 @@ app.post('/api/auth/register', async (req, res) => {
     // uid: 내부 식별자 (uid_xxx) — customer.uid 컬럼에 저장
     const uid = 'uid_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
+    // gender: M/F → MALE/FEMALE 통일 (DB 저장 형식)
+    const genderMap = { M: 'MALE', F: 'FEMALE', MALE: 'MALE', FEMALE: 'FEMALE' };
+    const dbGender  = genderMap[String(gender).toUpperCase()] || 'MALE';
+
     await pool.execute(
       `INSERT INTO customer
          (uid, name, email, phone, birth_date, gender,
           join_date, membership_level,
           marketing_consent, push_consent, email_consent, sms_consent)
        VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE, 'BASIC', ?, ?, ?, ?)`,
-      [uid, name || null, email, phone || null, birth_date || null, gender || 'N',
+      [uid, name || null, email, phone || null, birth_date || null, dbGender,
        marketing_consent ? 1 : 0, push_consent ? 1 : 0,
        email_consent ? 1 : 0, sms_consent ? 1 : 0]
     );
@@ -307,9 +311,10 @@ app.post('/api/customers', async (req, res) => {
          cold_sensitivity = VALUES(cold_sensitivity),
          activity_level   = VALUES(activity_level),
          preferred_style  = VALUES(preferred_style)`,
-      [customer_id, cold_sensitivity ?? 0,
-       (activity_level  || 'MEDIUM').toUpperCase(),
-       (preferred_style || 'CASUAL').toUpperCase()]
+      [customer_id,
+       parseInt(cold_sensitivity ?? 0) || 0,              // 숫자 강제 변환
+       (activity_level  || 'MEDIUM').toUpperCase(),        // 대문자 통일
+       (preferred_style || 'CASUAL').toUpperCase()]        // 대문자 통일
     );
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '고객 생성 실패' }); }
@@ -322,8 +327,18 @@ app.patch('/api/customers/:id', async (req, res) => {
   const fields = Object.keys(req.body).filter(k => allowed.includes(k));
   if (!fields.length) return res.status(400).json({ error: '변경할 필드 없음' });
   try {
+    // 값 정규화: gender M/F→MALE/FEMALE, 열거형 대문자, cold_sensitivity parseInt
+    const gMap = { M: 'MALE', F: 'FEMALE', MALE: 'MALE', FEMALE: 'FEMALE' };
+    const values = fields.map(f => {
+      const v = req.body[f];
+      if (f === 'gender')          return gMap[String(v).toUpperCase()] || 'MALE';
+      if (f === 'activity_level')  return (v || 'MEDIUM').toUpperCase();
+      if (f === 'preferred_style') return (v || 'CASUAL').toUpperCase();
+      if (f === 'membership_level')return (v || 'BASIC').toUpperCase();
+      if (f === 'cold_sensitivity')return parseInt(v) || 0;
+      return v;
+    });
     const setClause = fields.map(f => `${f} = ?`).join(', ');
-    const values    = fields.map(f => req.body[f]);
     if (String(req.params.id).startsWith('uid_')) {
       await pool.execute(`UPDATE customer SET ${setClause} WHERE uid = ?`, [...values, req.params.id]);
     } else {
@@ -395,7 +410,8 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
        ORDER BY pu.purchased_at DESC`,
       [custId]
     );
-    res.json(rows);
+    // product_id를 'prod_N' 포맷으로 변환 (프론트 localStorage와 타입 통일)
+    res.json(rows.map(row => ({ ...row, product_id: `prod_${row.product_id}` })));
   } catch (err) { console.error(err); res.status(500).json({ error: '찜 목록 조회 실패' }); }
 });
 
@@ -481,10 +497,10 @@ app.post('/api/wardrobe', async (req, res) => {
       `INSERT INTO wardrobe_item (customer_id, category, style, color_id, warmth, registered_date)
        VALUES (?, ?, ?, ?, ?, CURRENT_DATE)`,
       [custId,
-       (category || 'TOP').toUpperCase(),
-       (style    || 'CASUAL').toUpperCase(),
+       (category || 'TOP').toUpperCase(),           // 대문자 통일
+       (style    || 'CASUAL').toUpperCase(),         // 대문자 통일
        color_id ?? null,
-       warmth   ?? 1]
+       parseInt(warmth ?? 1) || 1]                  // 숫자 강제 변환
     );
     sendToFluentd({
       event_type:  'WARDROBE',
@@ -622,8 +638,17 @@ app.post('/api/feedback', async (req, res) => {
 
   const partnerCustId = partnerCustomerId ? Number(partnerCustomerId) : null;
 
+  // feedback: 영어로 오면 한글로 변환 후 유효성 검사
+  const feedbackKorMap = {
+    TOO_COLD: '너무추움', VERY_COLD: '너무추움',
+    COLD:     '춥다',
+    PERFECT:  '적당', GOOD: '적당', NORMAL: '적당',
+    HOT:      '덥다',
+    TOO_HOT:  '너무더움', VERY_HOT: '너무더움',
+  };
+  const normalizedFeedback = feedbackKorMap[String(feedback).toUpperCase()] || feedback;
   const VALID_FEEDBACK = ['너무추움', '춥다', '적당', '덥다', '너무더움'];
-  const safeFeedback = VALID_FEEDBACK.includes(feedback) ? feedback : '적당';
+  const safeFeedback = VALID_FEEDBACK.includes(normalizedFeedback) ? normalizedFeedback : '적당';
 
   const FEEDBACK_EN_MAP = {
     '너무추움': 'COLD', '춥다': 'COLD', '추움': 'COLD',
@@ -674,8 +699,8 @@ app.post('/api/feedback', async (req, res) => {
 // ================================================================
 app.post('/api/logs/behavior', async (req, res) => {
   const { customer_id, action, event_type, page_url, item_id, duration, scroll_depth } = req.body;
-  // action 또는 event_type 둘 다 수용 → event_type 컬럼에 저장
-  const evtType = event_type || action || null;
+  // action 또는 event_type 둘 다 수용 → event_type 컬럼에 소문자로 저장
+  const evtType = (event_type || action || null)?.toLowerCase() ?? null;
   // customer_id가 uid_xxx 문자열이면 bigint로 변환 (Kafka Consumer Long.parseLong 대응)
   const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
   try {

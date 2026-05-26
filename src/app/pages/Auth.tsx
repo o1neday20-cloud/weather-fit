@@ -10,7 +10,8 @@ const PARTNER_API = 'http://210.104.76.135:8080';
 
 /** 팀원 서버 회원가입 연동 — 응답 숫자 customer_id를 partnerCustomerId로 저장 */
 async function callPartnerSignup(regForm: any): Promise<void> {
-  const genderMap: Record<string, string> = { M: 'MALE', F: 'FEMALE' };
+  // M/F 레거시 값 + MALE/FEMALE 신규 값 모두 처리
+  const genderMap: Record<string, string> = { M: 'MALE', F: 'FEMALE', MALE: 'MALE', FEMALE: 'FEMALE' };
   try {
     const res = await fetch(`${PARTNER_API}/api/customers/signup`, {
       method: 'POST',
@@ -440,8 +441,8 @@ export default function Auth() {
                   onChange={e => setRegForm({...regForm, gender: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                   <option value="N">선택해주세요</option>
-                  <option value="M">남성</option>
-                  <option value="F">여성</option>
+                  <option value="MALE">남성</option>
+                  <option value="FEMALE">여성</option>
                 </select>
               </div>
 

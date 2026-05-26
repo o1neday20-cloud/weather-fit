@@ -6,7 +6,7 @@ import { Logger } from '../utils/logger';
 import { getProductById } from '../utils/products';
 import { Heart, ShoppingBag, Trash2, ArrowLeft } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
 interface WishItem {
   product_id: string;
@@ -55,18 +55,23 @@ export default function Wishlist() {
     setLoading(true);
     const localItems = getLocalWishlist();
     const userId = localStorage.getItem('userId');
-    if (userId && !userId.startsWith('anon_')) {
+    // partnerCustomerId(bigint) 우선 사용 → DB 조회 없이 직접 필터링
+    // uid_xxx는 getPartnerCustomerId()로 변환되지만 추가 DB 쿼리 발생
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const apiId = partnerCustomerId || userId; // bigint 우선, 없으면 uid_xxx
+    if (userId && !userId.startsWith('anon_') && apiId) {
       try {
-        const res = await fetch(`${API_BASE}/wishlist/${userId}`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE}/wishlist/${apiId}`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
           const apiItems: WishItem[] = await res.json();
           // API 결과 + localStorage 병합 (중복 product_id 제거)
-          const merged = [...apiItems];
-          for (const local of localItems) {
-            const localId = (local as any).product_id || (local as any).id;
-            if (!merged.find(a => a.product_id === localId)) merged.push(local);
-          }
-          setItems(merged.map(enrichImageUrl));
+          // 서버는 product_id를 'prod_N' 포맷으로 반환 → localStorage와 타입 일치
+          const apiIds = new Set(apiItems.map(a => String(a.product_id)));
+          const localOnly = localItems.filter(local => {
+            const localId = String((local as any).product_id || (local as any).id);
+            return !apiIds.has(localId);
+          });
+          setItems([...apiItems, ...localOnly].map(enrichImageUrl));
           setLoading(false);
           return;
         }
@@ -78,15 +83,19 @@ export default function Wishlist() {
 
   const handleRemove = async (productId: string) => {
     const userId = localStorage.getItem('userId');
-    if (userId) {
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const apiId = partnerCustomerId || userId; // bigint 우선
+    if (userId && apiId) {
       try {
-        await fetch(`${API_BASE}/wishlist/${userId}/${productId}`, { method: 'DELETE' });
+        await fetch(`${API_BASE}/wishlist/${apiId}/${productId}`, { method: 'DELETE' });
       } catch {}
     }
-    // localStorage에서도 제거
-    const local = getLocalWishlist().filter((i: any) => (i.product_id || i.id) !== productId);
+    // localStorage에서도 제거 (String 비교로 통일)
+    const local = getLocalWishlist().filter(
+      (i: any) => String(i.product_id || i.id) !== String(productId)
+    );
     setLocalWishlist(local);
-    setItems(prev => prev.filter(i => i.product_id !== productId));
+    setItems(prev => prev.filter(i => String(i.product_id) !== String(productId)));
     Logger.log('product_view', { productId, action: 'wishlist_remove' });
   };
 
