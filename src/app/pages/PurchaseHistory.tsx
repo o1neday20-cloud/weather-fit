@@ -32,6 +32,7 @@ interface PurchaseItem {
 export default function PurchaseHistory() {
   const navigate = useNavigate();
   const [history, setHistory] = useState<PurchaseItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [wardrobeIds, setWardrobeIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set()); // 이번 세션에서 추가된 항목
 
@@ -43,17 +44,48 @@ export default function PurchaseHistory() {
       return;
     }
 
-    // 구매 내역 로드 (최신순)
-    const stored: PurchaseItem[] = JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
-    setHistory(stored.slice().reverse());
-
     // 현재 옷장 ID 세트 구성
     const wardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
     const ids = new Set<string>(wardrobe.map((w: any) => w.id || w.productId));
     setWardrobeIds(ids);
 
+    loadHistory(userId);
     Logger.log('page_view', { page: 'purchase_history' });
   }, [navigate]);
+
+  const loadHistory = async (userId: string) => {
+    setLoading(true);
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const apiId = partnerCustomerId || userId;
+
+    try {
+      const res = await fetch(`${API_BASE}/purchase/${apiId}/history`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        // API 응답 → PurchaseItem 형태로 변환
+        const items: PurchaseItem[] = rows.map((row: any) => ({
+          productId:   `prod_${row.product_id}`,
+          productName: row.name || '',
+          brand:       row.brand || undefined,
+          price:       Number(row.price) || 0,
+          size:        row.size || 'M',
+          quantity:    1,
+          imageUrl:    row.image_url || undefined,
+          purchasedAt: row.purchased_at || new Date().toISOString(),
+        }));
+        setHistory(items);
+        setLoading(false);
+        return;
+      }
+    } catch {}
+
+    // API 실패 시 localStorage 폴백 (최신순)
+    const stored: PurchaseItem[] = JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
+    setHistory(stored.slice().reverse());
+    setLoading(false);
+  };
 
   const isInWardrobe = (productId: string) =>
     wardrobeIds.has(productId) || addedIds.has(productId);
@@ -136,7 +168,11 @@ export default function PurchaseHistory() {
           </div>
         </div>
 
-        {history.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : history.length === 0 ? (
           <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-16 text-center">
             <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-500 font-medium mb-1">구매 내역이 없어요</p>

@@ -663,6 +663,26 @@ app.delete('/api/wardrobe/:wardrobeId', async (req, res) => {
 // purchase: id(bigint PK auto), customer_id(bigint), product_id(bigint),
 //           price, purchased_at(datetime), status, size, view_duration
 // ================================================================
+// 구매 내역 조회  GET /api/purchase/:customerId/history
+app.get('/api/purchase/:customerId/history', async (req, res) => {
+  try {
+    const custId = await getPartnerCustomerId(req.params.customerId);
+    if (!custId) return res.status(400).json({ error: 'customer_id 변환 실패' });
+
+    const [rows] = await pool.execute(
+      `SELECT pu.id AS purchase_id, pu.product_id, pu.price, pu.size,
+              pu.status, pu.purchased_at,
+              p.product_name AS name, p.brand, p.image_url
+       FROM purchase pu
+       JOIN product p ON pu.product_id = p.id
+       WHERE pu.customer_id = ? AND pu.status = 'PURCHASED'
+       ORDER BY pu.purchased_at DESC`,
+      [custId]
+    );
+    res.json(rows);
+  } catch (err) { console.error(err); res.status(500).json({ error: '구매 내역 조회 실패' }); }
+});
+
 app.get('/api/purchase/:customerId/cart', async (req, res) => {
   try {
     const [rows] = await pool.execute(
