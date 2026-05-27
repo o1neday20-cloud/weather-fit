@@ -131,6 +131,26 @@ export default function Checkout() {
       couponInfo?.coupon_id, couponInfo?.discountAmt,
     ).catch(() => {});
 
+    // ── POST /api/purchase — 구매 완료 DB 저장 (아이템별 호출) ──────
+    const partnerCustomerIdForPurchase = localStorage.getItem('partnerCustomerId');
+    const partnerCustIdNum = partnerCustomerIdForPurchase ? Number(partnerCustomerIdForPurchase) : null;
+    for (const item of cartItems) {
+      const numericProductId = parseInt(String(item.product.id).replace(/^prod_/i, ''), 10);
+      fetch(`${API_BASE}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id:       partnerCustIdNum,
+          product_id:        numericProductId,
+          size:              item.size,
+          price:             item.product.price * item.quantity,
+          status:            'PURCHASED',
+          partnerCustomerId: partnerCustIdNum,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+
     // ── WARDROBE 이벤트 전송 (구매 상품 → 옷장 API) ───────────────
     const userId = localStorage.getItem('userId');
     const partnerCustomerId = localStorage.getItem('partnerCustomerId');
