@@ -6,7 +6,7 @@ import { wardrobeKey, deletedWardrobeKey } from '../utils/storage';
 import { getProductById, PRODUCT_COLORS } from '../utils/products';
 import { ArrowLeft, Package, Shirt, CheckCircle2 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
 // 한국어 색상명 → 영문 매핑 (파트너 color_id 조회용)
 const COLOR_NAME_MAP: Record<string, string> = {

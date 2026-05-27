@@ -1,35 +1,55 @@
 /**
  * WeatherFit 백엔드 API v5
- * DB: 팀원 weatherfit DB (210.104.76.135:3306) — DESCRIBE 실측 스키마 기준
+ * DB: weatherfit (210.104.76.135:3306) — 확정 DDL 기준
  *
  * customer         : id(bigint PK auto), uid(varchar50), name, email, phone,
  *                    birth_date, gender, join_date, membership_level,
  *                    cold_sensitivity, activity_level, preferred_style,
  *                    marketing_consent, push_consent, email_consent, sms_consent,
  *                    dm_consent, tm_consent, last_login_date, is_fraud,
- *                    join_channel, join_type, region_id
+ *                    join_channel, join_type, region_id, created_at, updated_at
  *                    ※ password_hash 없음, customer_id 컬럼 없음
  *
  * product          : id(bigint PK auto), product_name, category, price, style,
- *                    color_id, warmth, brand, image_url, in_stock
+ *                    color_id, warmth, brand, image_url, in_stock, created_at
  *                    ※ name 컬럼 없음
  *
+ * coupon           : id(bigint PK auto), coupon_name, code(varchar50),
+ *                    type(PERCENT/AMOUNT), discount_value, min_order_amount,
+ *                    max_discount_amount, valid_days, target_category, campaign_id,
+ *                    issued_count, used_count, status(ACTIVE/INACTIVE/EXPIRED),
+ *                    expired_at(date), description, created_at
+ *
+ * customer_coupon  : id(bigint PK auto), customer_id(bigint), coupon_id(bigint),
+ *                    issued_at, used_at, expired_at, status(ISSUED/USED/EXPIRED),
+ *                    order_id
+ *
  * purchase         : id(bigint PK auto), customer_id(bigint), product_id(bigint),
- *                    price, purchased_at(datetime), status, size, view_duration
- *                    ※ purchase_date 없음
+ *                    price, status(PURCHASED/WISHLIST/CART/VIEW_ONLY),
+ *                    size, view_duration, purchased_at, created_at
  *
- * wardrobe_item    : id(bigint PK auto), customer_id(bigint), category, style,
- *                    color_id, warmth, registered_date
+ * wardrobe_item    : id(bigint PK auto), customer_id(bigint), color_id,
+ *                    category, style, warmth, registered_date, created_at
  *
- * temperature_feedback : id(bigint PK auto), customer_id(bigint), feedback,
- *                        temperature(double), feedback_date,
+ * temperature_feedback : id(bigint PK auto), customer_id(bigint), region_id,
+ *                        feedback(HOT/COLD/PERFECT), temperature(double),
  *                        feels_like_temp, humidity, wind_speed,
- *                        weather_condition, recommended_outfit
+ *                        weather_condition, recommended_outfit,
+ *                        feedback_date, created_at
  *                        ※ actual_temp 없음 → temperature 사용
  *
  * behavior_log     : id(bigint PK auto), customer_id(bigint), event_type(varchar50),
- *                    page_url, item_id(bigint), duration, scroll_depth, timestamp
+ *                    page_url, item_id(bigint), duration, scroll_depth,
+ *                    timestamp, created_at
  *                    ※ action 컬럼 없음
+ *
+ * process_success_log : id, customer_id, topic, partition_no, offset_value,
+ *                       data_type, consumer_group, raw_message NOT NULL,
+ *                       processed_at NOT NULL, created_at NOT NULL
+ *
+ * process_fail_log : id, customer_id, topic, partition_no, offset_value,
+ *                    consumer_group, raw_message NOT NULL, fail_reason,
+ *                    fail_type, retry_count, processed_at NOT NULL, created_at NOT NULL
  */
 require('dotenv').config();
 const express = require('express');
@@ -40,6 +60,7 @@ const path    = require('path');
 const fs      = require('fs');
 const { Kafka, logLevel } = require('kafkajs');
 const axios   = require('axios');
+const bcrypt  = require('bcryptjs');
 
 // ── product_id 변환: prod_N 또는 숫자 → bigint ────────────────
 function toPartnerId(productId) {
@@ -199,10 +220,9 @@ app.get('/api/auth/check-email', async (req, res) => {
 });
 
 // 회원가입  POST /api/auth/register
-// password_hash 컬럼 없음 → bcrypt 불필요, uid로 내부 식별
 app.post('/api/auth/register', async (req, res) => {
   const {
-    name, email, phone, birth_date, gender,
+    name, email, phone, birth_date, gender, password,
     marketing_consent, push_consent, email_consent, sms_consent,
   } = req.body;
   if (!email) return res.status(400).json({ error: '이메일 필요' });
@@ -217,21 +237,24 @@ app.post('/api/auth/register', async (req, res) => {
     const genderMap = { M: 'MALE', F: 'FEMALE', MALE: 'MALE', FEMALE: 'FEMALE' };
     const dbGender  = genderMap[String(gender).toUpperCase()] || 'MALE';
 
+    // 비밀번호 해시 (password 없으면 null)
+    const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+
     await pool.execute(
       `INSERT INTO customer
-         (uid, name, email, phone, birth_date, gender,
+         (uid, password_hash, name, email, phone, birth_date, gender,
           join_date, membership_level,
           marketing_consent, push_consent, email_consent, sms_consent)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE, 'BASIC', ?, ?, ?, ?)`,
-      [uid, name || null, email, phone || null, birth_date || null, dbGender,
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, 'BASIC', ?, ?, ?, ?)`,
+      [uid, passwordHash, name || null, email, phone || null, birth_date || null, dbGender,
        marketing_consent ? 1 : 0, push_consent ? 1 : 0,
        email_consent ? 1 : 0, sms_consent ? 1 : 0]
     );
 
     const [rows] = await pool.execute('SELECT * FROM customer WHERE uid = ?', [uid]);
-    const customer = rows[0];
+    const { password_hash, ...safeCustomer } = rows[0];
     // customer_id = uid (프론트 localStorage 호환)
-    res.json({ success: true, customer: { ...customer, customer_id: uid } });
+    res.json({ success: true, customer: { ...safeCustomer, customer_id: uid } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '회원가입 실패' });
@@ -239,23 +262,31 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // 로그인  POST /api/auth/login
-// password_hash 없음 → 이메일만으로 조회 (로컬 폴백이 비밀번호 검증)
 app.post('/api/auth/login', async (req, res) => {
-  const { email } = req.body;
+  const { email, password } = req.body;
   if (!email) return res.status(400).json({ error: '이메일을 입력해주세요' });
   try {
     const [rows] = await pool.execute('SELECT * FROM customer WHERE email = ?', [email]);
     if (!rows.length) return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' });
     const customer = rows[0];
 
-    // last_login_date 업데이트 (bigint PK id 기준)
+    // 비밀번호 검증: DB에 hash가 있으면 반드시 password 필요
+    if (customer.password_hash) {
+      if (!password) return res.status(401).json({ error: '비밀번호를 입력해주세요' });
+      const ok = await bcrypt.compare(password, customer.password_hash);
+      if (!ok) return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다' });
+    }
+
+    // last_login_date 업데이트
     await pool.execute(
       'UPDATE customer SET last_login_date = CURRENT_DATE WHERE id = ?',
       [customer.id]
     );
 
+    // 응답에서 password_hash 제거 후 전송
+    const { password_hash, ...safeCustomer } = customer;
     // customer_id = uid (프론트 localStorage 호환), id(bigint)도 포함 → partnerCustomerId 저장용
-    res.json({ success: true, customer: { ...customer, customer_id: customer.uid } });
+    res.json({ success: true, customer: { ...safeCustomer, customer_id: customer.uid } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: '로그인 실패' });
@@ -327,21 +358,40 @@ app.get('/api/customers/:id', async (req, res) => {
 });
 
 app.post('/api/customers', async (req, res) => {
-  const { customer_id, cold_sensitivity, activity_level, preferred_style } = req.body;
+  const { customer_id, cold_sensitivity, activity_level, preferred_style, name, email } = req.body;
+
+  // name과 email이 둘 다 없으면 빈 고객 INSERT 금지 (ensureCustomer() 방어)
+  if (!name && !email) return res.json({ success: true, skipped: true });
+
   try {
-    await pool.execute(
-      `INSERT INTO customer (uid, cold_sensitivity, activity_level, preferred_style,
-         membership_level, join_date, join_channel, join_type)
-       VALUES (?, ?, ?, ?, 'BASIC', CURRENT_DATE, 'web', 'self')
-       ON DUPLICATE KEY UPDATE
-         cold_sensitivity = VALUES(cold_sensitivity),
-         activity_level   = VALUES(activity_level),
-         preferred_style  = VALUES(preferred_style)`,
-      [customer_id,
-       parseInt(cold_sensitivity ?? 0) || 0,              // 숫자 강제 변환
-       (activity_level  || 'MEDIUM').toUpperCase(),        // 대문자 통일
-       (preferred_style || 'CASUAL').toUpperCase()]        // 대문자 통일
+    // 이미 존재하는 customer_id면 INSERT 대신 선호도 UPDATE만 실행
+    const [existing] = await pool.execute(
+      'SELECT id FROM customer WHERE uid = ?', [customer_id]
     );
+
+    if (existing.length > 0) {
+      await pool.execute(
+        `UPDATE customer SET
+           cold_sensitivity = ?,
+           activity_level   = ?,
+           preferred_style  = ?
+         WHERE uid = ?`,
+        [parseInt(cold_sensitivity ?? 0) || 0,
+         (activity_level  || 'MEDIUM').toUpperCase(),
+         (preferred_style || 'CASUAL').toUpperCase(),
+         customer_id]
+      );
+    } else {
+      await pool.execute(
+        `INSERT INTO customer (uid, cold_sensitivity, activity_level, preferred_style,
+           membership_level, join_date, join_channel, join_type)
+         VALUES (?, ?, ?, ?, 'BASIC', CURRENT_DATE, 'web', 'self')`,
+        [customer_id,
+         parseInt(cold_sensitivity ?? 0) || 0,
+         (activity_level  || 'MEDIUM').toUpperCase(),
+         (preferred_style || 'CASUAL').toUpperCase()]
+      );
+    }
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '고객 생성 실패' }); }
 });
@@ -381,20 +431,23 @@ app.get('/api/coupons/validate', async (req, res) => {
   try {
     const { code, orderAmt } = req.query;
     if (!code) return res.status(400).json({ error: '쿠폰 코드 필요' });
+    // DDL: code VARCHAR(50), status ACTIVE/INACTIVE/EXPIRED, expired_at DATE
     const [rows] = await pool.execute(
-      `SELECT * FROM coupon WHERE code = ? AND is_active = 1
-       AND valid_from <= CURRENT_DATE AND valid_until >= CURRENT_DATE`,
+      `SELECT * FROM coupon
+       WHERE code = ? AND status = 'ACTIVE'
+         AND (expired_at IS NULL OR expired_at >= CURRENT_DATE)`,
       [code.toUpperCase()]
     );
     if (!rows.length) return res.status(404).json({ error: '유효하지 않은 쿠폰 코드입니다' });
     const cpn = rows[0];
     const amt = parseInt(orderAmt) || 0;
-    if (cpn.min_order_amt && amt < cpn.min_order_amt) {
-      return res.status(400).json({ error: `최소 주문금액 ${cpn.min_order_amt.toLocaleString()}원 이상` });
+    // DDL: min_order_amount, max_discount_amount, type(PERCENT/AMOUNT)
+    if (cpn.min_order_amount && amt < cpn.min_order_amount) {
+      return res.status(400).json({ error: `최소 주문금액 ${cpn.min_order_amount.toLocaleString()}원 이상` });
     }
-    const discountAmt = cpn.discount_type === 'amount'
+    const discountAmt = cpn.type === 'AMOUNT'
       ? cpn.discount_value
-      : Math.min(Math.floor(amt * cpn.discount_value / 100), cpn.max_discount || Infinity);
+      : Math.min(Math.floor(amt * cpn.discount_value / 100), cpn.max_discount_amount || Infinity);
     res.json({ ...cpn, discountAmt });
   } catch { res.status(200).json({ error: '쿠폰 기능 미지원' }); }
 });
@@ -420,14 +473,16 @@ app.post('/api/coupons/issue-campaign', async (req, res) => {
 });
 
 // ── 내 쿠폰 목록 조회 ─────────────────────────────────────────
-// coupon 테이블 실제 컬럼: type, min_order_amount, max_discount_amount, expired_at(customer_coupon)
-// code 컬럼 없음 → coupon_id를 code로 사용
+// DDL 기준:
+//   coupon: coupon_name, code, type(PERCENT/AMOUNT), min_order_amount, max_discount_amount, status(ACTIVE/...)
+//   customer_coupon: coupon_id → JOIN coupon.id, status(ISSUED/USED/EXPIRED), expired_at
 // discount_type: DB 'AMOUNT'/'PERCENT' → 프론트 'amount'/'percent' 소문자 변환
 app.get('/api/coupons/my/:customerId', async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `SELECT cc.coupon_id,
-              c.name,
+              c.coupon_name         AS name,
+              c.code,
               c.type                AS discount_type,
               c.discount_value,
               c.min_order_amount    AS min_order_amt,
@@ -435,17 +490,17 @@ app.get('/api/coupons/my/:customerId', async (req, res) => {
               cc.issued_at          AS valid_from,
               cc.expired_at         AS valid_until
        FROM customer_coupon cc
-       JOIN coupon c ON cc.coupon_id = c.coupon_id
+       JOIN coupon c ON cc.coupon_id = c.id
        WHERE cc.customer_id = ? AND cc.used_at IS NULL
-         AND cc.status = 'ACTIVE' AND cc.expired_at >= CURRENT_DATE
+         AND cc.status = 'ISSUED' AND cc.expired_at >= CURRENT_DATE
          AND c.status = 'ACTIVE'
        ORDER BY cc.expired_at ASC`,
       [req.params.customerId]
     );
     const result = rows.map(r => ({
       ...r,
-      code:          r.coupon_id,                           // coupon 테이블에 code 컬럼 없음
-      discount_type: (r.discount_type || '').toLowerCase(), // 'AMOUNT'→'amount'
+      code:          r.code || String(r.coupon_id),         // code 있으면 사용, 없으면 coupon_id 폴백
+      discount_type: (r.discount_type || '').toLowerCase(), // 'AMOUNT'→'amount', 'PERCENT'→'percent'
     }));
     res.json(result);
   } catch (err) {
@@ -713,24 +768,21 @@ app.post('/api/feedback', async (req, res) => {
 
   const partnerCustId = partnerCustomerId ? Number(partnerCustomerId) : null;
 
-  // feedback: 영어로 오면 한글로 변환 후 유효성 검사
-  const feedbackKorMap = {
-    TOO_COLD: '너무추움', VERY_COLD: '너무추움',
-    COLD:     '춥다',
-    PERFECT:  '적당', GOOD: '적당', NORMAL: '적당',
-    HOT:      '덥다',
-    TOO_HOT:  '너무더움', VERY_HOT: '너무더움',
+  // feedback → DDL 저장값: HOT / COLD / PERFECT (대문자 영어)
+  // 한글·영어 혼용 입력을 모두 수용해 DDL 기준 대문자 영어로 정규화
+  const FEEDBACK_NORM_MAP = {
+    // 영어 입력
+    HOT: 'HOT', TOO_HOT: 'HOT', VERY_HOT: 'HOT',
+    COLD: 'COLD', TOO_COLD: 'COLD', VERY_COLD: 'COLD',
+    PERFECT: 'PERFECT', GOOD: 'PERFECT', NORMAL: 'PERFECT',
+    // 한글 입력
+    '덥다': 'HOT', '너무더움': 'HOT', '더움': 'HOT',
+    '춥다': 'COLD', '너무추움': 'COLD', '추움': 'COLD',
+    '적당': 'PERFECT', '딱좋음': 'PERFECT',
   };
-  const normalizedFeedback = feedbackKorMap[String(feedback).toUpperCase()] || feedback;
-  const VALID_FEEDBACK = ['너무추움', '춥다', '적당', '덥다', '너무더움'];
-  const safeFeedback = VALID_FEEDBACK.includes(normalizedFeedback) ? normalizedFeedback : '적당';
-
-  const FEEDBACK_EN_MAP = {
-    '너무추움': 'COLD', '춥다': 'COLD', '추움': 'COLD',
-    '적당':     'PERFECT', '딱좋음': 'PERFECT',
-    '덥다':     'HOT',  '더움': 'HOT', '너무더움': 'HOT',
-  };
-  const feedbackEn = FEEDBACK_EN_MAP[safeFeedback] || 'PERFECT';
+  const dbFeedback = FEEDBACK_NORM_MAP[String(feedback).toUpperCase()]
+                  || FEEDBACK_NORM_MAP[String(feedback)]
+                  || 'PERFECT';
 
   const WEATHER_CODE_MAP = {
     '맑음': 'CLEAR', '흐림': 'CLOUDY', '구름많음': 'PARTLY_CLOUDY',
@@ -739,14 +791,15 @@ app.post('/api/feedback', async (req, res) => {
   const mappedCondition = WEATHER_CODE_MAP[weather_condition] || weather_condition;
 
   try {
+    // DDL: feedback VARCHAR(20) — HOT / COLD / PERFECT (영어 대문자)
     // actual_temp → temperature 컬럼
     await pool.execute(
       `INSERT INTO temperature_feedback
          (customer_id, feedback, temperature, feels_like_temp,
           humidity, wind_speed, weather_condition, feedback_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_DATE)`,
-      [partnerCustId, safeFeedback, actual_temp, feels_like_temp,
-       humidity, wind_speed, weather_condition]
+      [partnerCustId, dbFeedback, actual_temp, feels_like_temp,
+       humidity, wind_speed, mappedCondition]
     );
 
     sendToFluentd({
@@ -757,7 +810,7 @@ app.post('/api/feedback', async (req, res) => {
       humidity,
       wind_speed,
       weather_condition: mappedCondition,
-      feedback:          feedbackEn,
+      feedback:          dbFeedback,
       feedback_date:     new Date().toISOString().split('T')[0],
       timestamp:         new Date().toISOString(),
     });
@@ -774,8 +827,8 @@ app.post('/api/feedback', async (req, res) => {
 // ================================================================
 app.post('/api/logs/behavior', async (req, res) => {
   const { customer_id, action, event_type, page_url, item_id, duration, scroll_depth } = req.body;
-  // action 또는 event_type 둘 다 수용 → 대문자 통일
-  const dbEventType = (event_type || action || 'PAGE_VIEW').toUpperCase();
+  // action 또는 event_type 둘 다 수용 → 소문자 통일 (확정 event_type 목록: page_view / login / ...)
+  const dbEventType = (event_type || action || 'page_view').toLowerCase();
   try {
     const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
 
@@ -787,10 +840,11 @@ app.post('/api/logs/behavior', async (req, res) => {
     }).catch(e => console.warn('[Kafka behavior]', e.message));
 
     // DB 항상 직접 저장 (Kafka Consumer 없어도 데이터 보장)
+    // DDL: timestamp DATETIME + created_at DATETIME 둘 다 설정
     await pool.execute(
       `INSERT INTO behavior_log
-         (customer_id, event_type, page_url, item_id, duration, scroll_depth, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+         (customer_id, event_type, page_url, item_id, duration, scroll_depth, timestamp, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [custId ?? null, dbEventType, page_url ?? null,
        item_id ? Number(item_id) : null, duration ?? null, scroll_depth ?? null]
     );
@@ -804,12 +858,15 @@ app.post('/api/logs/behavior', async (req, res) => {
 
 app.post('/api/logs/success', async (req, res) => {
   try {
-    const { topic, partition_no, offset_value, data_type, raw_data, customer_id, consumer_group } = req.body;
+    // DDL: raw_message NOT NULL, processed_at NOT NULL, created_at NOT NULL
+    const { topic, partition_no, offset_value, data_type, raw_message, raw_data, customer_id, consumer_group } = req.body;
+    const rawMsg = raw_message ?? (raw_data ? JSON.stringify(raw_data) : '{}');
     await pool.execute(
       `INSERT INTO process_success_log
-         (topic, partition_no, offset_value, data_type, raw_data, customer_id, consumer_group)
-       VALUES (?,?,?,?,?,?,?)`,
-      [topic, partition_no, offset_value, data_type, JSON.stringify(raw_data), customer_id ?? null, consumer_group]
+         (topic, partition_no, offset_value, data_type, raw_message, customer_id, consumer_group, processed_at, created_at)
+       VALUES (?,?,?,?,?,?,?,NOW(),NOW())`,
+      [topic, partition_no ?? null, offset_value ?? null, data_type ?? null,
+       rawMsg, customer_id ?? null, consumer_group ?? null]
     );
     res.json({ success: true });
   } catch { res.json({ success: true }); }
@@ -817,17 +874,20 @@ app.post('/api/logs/success', async (req, res) => {
 
 app.post('/api/logs/fail', async (req, res) => {
   try {
+    // DDL: raw_message NOT NULL, processed_at NOT NULL, created_at NOT NULL
     const {
-      topic, partition_no, offset_value, raw_data,
+      topic, partition_no, offset_value, raw_message, raw_data,
       fail_reason, fail_type, customer_id, retry_count, consumer_group,
     } = req.body;
+    const rawMsg = raw_message ?? (raw_data ? JSON.stringify(raw_data) : '{}');
     await pool.execute(
       `INSERT INTO process_fail_log
-         (topic, partition_no, offset_value, raw_data,
-          fail_reason, fail_type, customer_id, retry_count, consumer_group)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [topic, partition_no, offset_value, JSON.stringify(raw_data),
-       fail_reason, fail_type, customer_id ?? null, retry_count ?? 0, consumer_group]
+         (topic, partition_no, offset_value, raw_message,
+          fail_reason, fail_type, customer_id, retry_count, consumer_group, processed_at, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,NOW(),NOW())`,
+      [topic, partition_no ?? null, offset_value ?? null, rawMsg,
+       fail_reason ?? null, fail_type ?? null, customer_id ?? null,
+       retry_count ?? 0, consumer_group ?? null]
     );
     res.json({ success: true });
   } catch { res.json({ success: true }); }
@@ -954,14 +1014,28 @@ app.get('/api/admin/coupons', adminAuth, async (req, res) => {
 
 app.post('/api/admin/coupons', adminAuth, async (req, res) => {
   try {
-    const { name, code, discount_type, discount_value, min_order_amt, max_discount, valid_from, valid_until } = req.body;
+    // DDL: coupon_name, code, type(PERCENT/AMOUNT), min_order_amount, max_discount_amount, expired_at
+    const {
+      coupon_name, name, code,
+      type, discount_type,
+      discount_value,
+      min_order_amount, min_order_amt,
+      max_discount_amount, max_discount,
+      expired_at, valid_until,
+    } = req.body;
+    const dbName     = coupon_name || name || null;
+    const dbType     = (type || discount_type || 'PERCENT').toUpperCase();  // PERCENT / AMOUNT
+    const dbMinOrder = min_order_amount ?? min_order_amt ?? 0;
+    const dbMaxDisc  = max_discount_amount ?? max_discount ?? null;
+    const dbExpired  = expired_at || valid_until || null;
+
     await pool.execute(
       `INSERT INTO coupon
-         (code, name, discount_type, discount_value,
-          min_order_amt, max_discount, valid_from, valid_until)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [code.toUpperCase(), name, discount_type, discount_value,
-       min_order_amt || 0, max_discount || null, valid_from, valid_until]
+         (coupon_name, code, type, discount_value,
+          min_order_amount, max_discount_amount, expired_at, status, created_at)
+       VALUES (?,?,?,?,?,?,?,'ACTIVE',NOW())`,
+      [dbName, code ? code.toUpperCase() : null, dbType, discount_value,
+       dbMinOrder, dbMaxDisc, dbExpired]
     );
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '쿠폰 생성 실패' }); }

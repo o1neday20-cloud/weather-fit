@@ -269,6 +269,16 @@ export default function Auth() {
       mergeGuestWishlist(data.customer.customer_id);
       mergeGuestWardrobe(data.customer.customer_id);
       await Logger.ensureCustomer();
+      // 로그인 이벤트 → behavior_log (event_type: 'login' 소문자, customer_id: bigint)
+      fetch(`${API_BASE}/logs/behavior`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: data.customer.id,
+          event_type:  'login',
+          page_url:    '/auth',
+        }),
+      }).catch(() => {});
       navigate(redirectTo);
     } catch {
       try {

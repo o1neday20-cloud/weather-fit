@@ -89,7 +89,7 @@ export default function Wardrobe() {
     Logger.log('item_deleted', { itemId: id });
 
     // 백엔드 삭제 API 호출
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
     const partnerCustomerId = localStorage.getItem('partnerCustomerId');
     const qp = partnerCustomerId ? `?partnerCustomerId=${partnerCustomerId}` : '';
     fetch(`${API_BASE}/wardrobe/${id}${qp}`, { method: 'DELETE', signal: AbortSignal.timeout(3000) }).catch(() => {});
@@ -140,7 +140,7 @@ export default function Wardrobe() {
     setShowAddModal(false);
 
     // 백엔드 동기화 (실패해도 localStorage는 이미 저장됨)
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
     const partnerCustomerId = localStorage.getItem('partnerCustomerId');
 
     // partnerColors에서 선택한 색상의 color_id 조회
@@ -495,7 +495,7 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
   const SERVER_ORIGIN = API_BASE.replace(/\/api$/, '');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -726,7 +726,7 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
   const [imageUrl,     setImageUrl]     = useState<string>(item.image || '');
   const [uploading,    setUploading]    = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
   const SERVER_ORIGIN = API_BASE.replace(/\/api$/, '');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

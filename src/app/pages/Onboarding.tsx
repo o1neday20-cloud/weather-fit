@@ -83,7 +83,7 @@ export default function Onboarding() {
         localStorage.setItem('userProfile', JSON.stringify(newProfile));
 
         // 서버에도 반영 시도
-        const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.136:4000/api';
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
         fetch(`${API_BASE}/customers/${userId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },

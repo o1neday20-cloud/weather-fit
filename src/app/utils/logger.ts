@@ -12,10 +12,12 @@ const API_BASE      = import.meta.env.VITE_API_URL      || 'http://localhost:400
 const FLUENTD_URL   = import.meta.env.VITE_FLUENTD_URL  || 'http://localhost:24224';
 const USE_FLUENTD   = import.meta.env.VITE_USE_FLUENTD  === 'true';
 
+// 팀원 확정 event_type 목록 — 모두 소문자
 export type ActionType =
-  | 'PAGE_VIEW' | 'PRODUCT_VIEW' | 'ADD_TO_CART' | 'PURCHASE'
-  | 'OUTFIT_VIEW' | 'FEEDBACK' | 'SEARCH' | 'WARDROBE_ADD'
-  | 'WISHLIST_ADD' | 'WISHLIST_REMOVE' | 'COUPON_APPLY';
+  | 'page_view' | 'product_view' | 'outfit_view' | 'search'
+  | 'add_to_cart' | 'wishlist_add' | 'wishlist_remove'
+  | 'wardrobe_add' | 'login' | 'purchase' | 'scroll' | 'feedback'
+  | 'coupon_apply';
 
 export interface LogData {
   timestamp: string;
@@ -119,21 +121,53 @@ async function sendBehavior(payload: {
   }
 }
 
+// 모든 값 소문자 — 대소문자 혼용 입력도 소문자로 정규화
 function toActionType(eventType: string): ActionType {
   const map: Record<string, ActionType> = {
-    page_view:          'PAGE_VIEW',
-    product_view:       'PRODUCT_VIEW',
-    add_to_cart:        'ADD_TO_CART',
-    purchase_completed: 'PURCHASE',
-    outfit_generated:   'OUTFIT_VIEW',
-    forecast_selected:  'OUTFIT_VIEW',
-    feedback_submitted: 'FEEDBACK',
-    search:             'SEARCH',
-    item_added:         'WARDROBE_ADD',
-    wishlist_add:       'WISHLIST_ADD',
-    wishlist_remove:    'WISHLIST_REMOVE',
+    // page
+    page_view:          'page_view',
+    PAGE_VIEW:          'page_view',
+    // product
+    product_view:       'product_view',
+    PRODUCT_VIEW:       'product_view',
+    VIEW:               'product_view',
+    view:               'product_view',
+    // outfit
+    outfit_view:        'outfit_view',
+    OUTFIT_VIEW:        'outfit_view',
+    outfit_generated:   'outfit_view',
+    forecast_selected:  'outfit_view',
+    // search
+    search:             'search',
+    SEARCH:             'search',
+    // cart
+    add_to_cart:        'add_to_cart',
+    ADD_TO_CART:        'add_to_cart',
+    // wishlist
+    wishlist_add:       'wishlist_add',
+    WISHLIST_ADD:       'wishlist_add',
+    wishlist_remove:    'wishlist_remove',
+    WISHLIST_REMOVE:    'wishlist_remove',
+    // wardrobe
+    wardrobe_add:       'wardrobe_add',
+    WARDROBE_ADD:       'wardrobe_add',
+    item_added:         'wardrobe_add',
+    // purchase
+    purchase:           'purchase',
+    PURCHASE:           'purchase',
+    purchase_completed: 'purchase',
+    // feedback
+    feedback:           'feedback',
+    FEEDBACK:           'feedback',
+    feedback_submitted: 'feedback',
+    // login
+    login:              'login',
+    LOGIN:              'login',
+    // scroll
+    scroll:             'scroll',
+    SCROLL:             'scroll',
   };
-  return map[eventType] ?? 'PAGE_VIEW';
+  return map[eventType] ?? 'page_view';
 }
 
 export class Logger {
@@ -251,7 +285,7 @@ export class Logger {
     // wishlist는 별도 API가 처리하므로 behavior_log에만 기록
     await sendToApi('/logs/behavior', {
       customer_id: custId,
-      action:      action === 'add' ? 'WISHLIST_ADD' : 'WISHLIST_REMOVE',
+      event_type:  action === 'add' ? 'wishlist_add' : 'wishlist_remove',
       page_url:    window.location.href,
       item_id:     numItemId, // 숫자 bigint
     });
@@ -278,6 +312,10 @@ export class Logger {
 
   // ── customer 자동 등록 ─────────────────────────────────────
   static async ensureCustomer() {
+    // partnerCustomerId(bigint)가 있으면 이미 DB에 존재하는 고객 → 호출 불필요
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    if (partnerCustomerId) return;
+
     const userId = this.getUserId();
     const userPref = JSON.parse(localStorage.getItem('userPreference') || '{}');
     try {
