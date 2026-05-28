@@ -190,6 +190,12 @@ const pool = mysql.createPool({
   connectionLimit:    10,
 });
 
+// ── 시작 시 불필요 상품 자동 숨김 ────────────────────────────
+// DB id 25(스키니 청바지), 26(기모 스웨트팬츠), 27(트레이닝 팬츠) — 중복/불필요
+pool.execute('UPDATE product SET in_stock = 0 WHERE id IN (25, 26, 27)')
+  .then(() => console.log('[Startup] 불필요 상품 숨김 완료 (id: 25,26,27)'))
+  .catch(e => console.warn('[Startup] 상품 숨김 실패:', e.message));
+
 app.get('/health', (_, res) => res.json({ ok: true }));
 
 // ================================================================
