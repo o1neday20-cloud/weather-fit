@@ -225,20 +225,12 @@ export class Logger {
   }>, couponId?: string, discountAmt?: number) {
     const partnerCustId = getPartnerCustId();
     for (const item of items) {
-      const payload = {
+      await sendToApi('/logs/behavior', {
         event_type:  'purchase',
         customer_id: partnerCustId,
         page_url:    window.location.href,
         item_id:     toItemId(item.productId),
-      };
-
-      // Fluentd → Kafka weatherfit-log-raw
-      if (USE_FLUENTD) {
-        const ok = await sendToFluentd('weatherfit-log-raw', payload);
-        if (ok) continue;
-      }
-      // 폴백: behavior log API
-      await sendToApi('/logs/behavior', payload);
+      });
     }
   }
 

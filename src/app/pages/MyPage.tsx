@@ -51,17 +51,21 @@ export default function MyPage() {
       fetch(`${API_BASE}/customers/${userId}`)
         .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
-          if (data.membership_level) setMembershipLevel(data.membership_level);
+          // 구매금액 기반으로 등급 계산 (DB 컬럼은 갱신 지연 있으므로 사용하지 않음)
+          const amount = data.membership_amount ?? 0;
+          const computedLevel = amount >= 500000 ? 'VIP'
+            : amount >= 300000 ? 'GOLD'
+            : amount >= 100000 ? 'SILVER'
+            : 'BASIC';
+          setMembershipLevel(computedLevel);
           setMembershipData({
-            amount:        data.membership_amount ?? 0,
+            amount,
             amount_to_next: Math.max(0, data.amount_to_next ?? 0),
-            next_level:    data.next_level    ?? null,
-            next_update:   data.next_update   ?? '',
+            next_level:    data.next_level  ?? null,
+            next_update:   data.next_update ?? '',
           });
         })
-        .catch(() => {
-          if (p.membership_level) setMembershipLevel(p.membership_level);
-        });
+        .catch(() => {});
       // 쿠폰 수 로드
       fetch(`${API_BASE}/coupons/my/${userId}`, { signal: AbortSignal.timeout(3000) })
         .then(r => r.ok ? r.json() : [])

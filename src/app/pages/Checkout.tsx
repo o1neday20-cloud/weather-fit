@@ -5,7 +5,6 @@ import { Logger } from '../utils/logger';
 import { wardrobeKey, cartKey, loadAddressHistory, saveAddress, SavedAddress } from '../utils/storage';
 import { CheckCircle2, Ticket, X, Check, ChevronDown, User, Clock } from 'lucide-react';
 import { loadMyCoupons, calcDiscount, consumeCoupon, isCouponValid, CouponItem } from '../utils/coupon';
-import { addPurchaseAmount } from '../utils/membership';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
@@ -223,10 +222,6 @@ export default function Checkout() {
       if (userId) consumeCoupon(userId, couponInfo.coupon_id);
       setMyCoupons(prev => prev.filter(c => c.coupon_id !== couponInfo.coupon_id));
     }
-    // 멤버십 등급 업데이트 (실제 결제 금액 기준)
-    const finalAmount = getFinalPrice();
-    addPurchaseAmount(finalAmount);
-
     setProcessing(false); setCompleted(true);
     setTimeout(() => navigate('/'), 3000);
   };
