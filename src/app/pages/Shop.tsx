@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { cartKey } from '../utils/storage';
 import { Link, useNavigate } from 'react-router';
 import Navigation from '../components/Navigation';
-import { mockProducts, Product } from '../utils/products';
+import { Product } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { ShoppingBag, Search, X, CheckCircle, Heart } from 'lucide-react';
 
@@ -94,7 +94,9 @@ function CartSuccessModal({
 }
 
 export default function Shop() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
@@ -140,6 +142,34 @@ export default function Shop() {
     setWishlist(new Set(stored.map((i: any) => i.product_id || i.id)));
   }, []);
 
+  // ── /api/products 에서 최신 상품 목록 로드 ──────────────────
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API_BASE}/products`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((rows: any[]) => {
+        const mapped: Product[] = rows.map(row => ({
+          id:          row.product_id,                          // 'prod_N'
+          name:        row.name || row.product_name || '',
+          brand:       row.brand || '',
+          price:       Number(row.price) || 0,
+          category:    (row.category || 'top').toLowerCase(),
+          warmth:      Number(row.warmth) || 1,
+          style:       (row.style || 'casual').toLowerCase(),
+          color:       '#9CA3AF',                               // color_id → hex 미지원, 기본값
+          colors:      [],
+          sizes:       ['S', 'M', 'L', 'XL'],
+          description: '',
+          inStock:     row.in_stock === 1 || row.in_stock === true,
+          isOwned:     false,
+          imageUrl:    row.image_url || undefined,
+        }));
+        setAllProducts(mapped);
+      })
+      .catch(() => setAllProducts([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   const handleToggleWishlist = async (product: Product, e: React.MouseEvent) => {
     e.preventDefault();
     const userId = localStorage.getItem('userId');
@@ -175,7 +205,7 @@ export default function Shop() {
   };
 
   useEffect(() => {
-    let filtered = mockProducts;
+    let filtered = allProducts;
     if (category !== 'all') filtered = filtered.filter(p => p.category === category);
     if (searchQuery)
       filtered = filtered.filter(
@@ -184,7 +214,7 @@ export default function Shop() {
           p.brand.toLowerCase().includes(searchQuery.toLowerCase())
       );
     setProducts(filtered);
-  }, [category, searchQuery]);
+  }, [category, searchQuery, allProducts]);
 
   const categories = [
     { id: 'all', label: '전체' },
@@ -315,16 +345,23 @@ export default function Shop() {
         </div>
 
         {/* 상품 목록 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} onAddToCart={handleAddToCart} onToggleWishlist={handleToggleWishlist} isWished={wishlist.has(product.id)} />
-          ))}
-        </div>
-
-        {products.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">검색 결과가 없습니다</p>
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} onAddToCart={handleAddToCart} onToggleWishlist={handleToggleWishlist} isWished={wishlist.has(product.id)} />
+              ))}
+            </div>
+            {products.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-500">검색 결과가 없습니다</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
