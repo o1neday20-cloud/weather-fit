@@ -121,35 +121,42 @@ export default function Checkout() {
       });
       localStorage.setItem(wardrobeKey(), JSON.stringify(wardrobe));
     }
+    // ── 1. DB 저장 (필수) — 아이템별 POST /api/purchase ──────────
+    const partnerCustIdNum = Number(localStorage.getItem('partnerCustomerId')) || null;
+    for (const item of cartItems) {
+      const numericProductId = Number(String(item.product.id).replace(/^prod_/i, ''));
+      try {
+        await fetch(`${API_BASE}/purchase`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_id: partnerCustIdNum,
+            product_id:  numericProductId,
+            size:        item.size,
+            price:       item.product.price * item.quantity,
+            status:      'PURCHASED',
+          }),
+          keepalive: true,
+        });
+      } catch {}
+    }
+
+    // ── 2. 행동 로그 (별도, fire-and-forget) ──────────────────────
     Logger.log('purchase_completed', {
-      items: cartItems.map(item => ({ productId: item.product.id, productName: item.product.name, quantity: item.quantity, price: item.product.price })),
-      totalPrice: getTotalPrice(), couponUsed: couponInfo?.coupon_id, discountAmt: couponInfo?.discountAmt || 0, finalPrice: getFinalPrice(), addToWardrobe,
+      items: cartItems.map(item => ({
+        productId: item.product.id, productName: item.product.name,
+        quantity: item.quantity, price: item.product.price,
+      })),
+      totalPrice: getTotalPrice(), couponUsed: couponInfo?.coupon_id,
+      discountAmt: couponInfo?.discountAmt || 0, finalPrice: getFinalPrice(), addToWardrobe,
     });
-    // logPurchase는 fire-and-forget (실패해도 결제 완료 처리)
     (Logger as any).logPurchase(
-      cartItems.map(item => ({ productId: item.product.id, productName: item.product.name, size: item.size, quantity: item.quantity, price: item.product.price })),
+      cartItems.map(item => ({
+        productId: item.product.id, productName: item.product.name,
+        size: item.size, quantity: item.quantity, price: item.product.price,
+      })),
       couponInfo?.coupon_id, couponInfo?.discountAmt,
     ).catch(() => {});
-
-    // ── POST /api/purchase — 구매 완료 DB 저장 (아이템별 호출) ──────
-    const partnerCustomerIdForPurchase = localStorage.getItem('partnerCustomerId');
-    const partnerCustIdNum = partnerCustomerIdForPurchase ? Number(partnerCustomerIdForPurchase) : null;
-    for (const item of cartItems) {
-      const numericProductId = parseInt(String(item.product.id).replace(/^prod_/i, ''), 10);
-      fetch(`${API_BASE}/purchase`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id:       partnerCustIdNum,
-          product_id:        numericProductId,
-          size:              item.size,
-          price:             item.product.price * item.quantity,
-          status:            'PURCHASED',
-          partnerCustomerId: partnerCustIdNum,
-        }),
-        keepalive: true,
-      }).catch(() => {});
-    }
 
     // ── WARDROBE 이벤트 전송 (구매 상품 → 옷장 API) ───────────────
     const userId = localStorage.getItem('userId');
