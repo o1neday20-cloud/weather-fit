@@ -1039,6 +1039,15 @@ app.get('/api/admin/customers/:id', adminAuth, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: '고객 상세 조회 실패' }); }
 });
 
+// 상품 재고 상태 수정  PATCH /api/admin/products/:id
+app.patch('/api/admin/products/:id', adminAuth, async (req, res) => {
+  try {
+    const inStock = req.body.in_stock ? 1 : 0;
+    await pool.execute('UPDATE product SET in_stock = ? WHERE id = ?', [inStock, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: '상품 수정 실패' }); }
+});
+
 app.patch('/api/admin/customers/:id/membership', adminAuth, async (req, res) => {
   const { membership_level } = req.body;
   try {
