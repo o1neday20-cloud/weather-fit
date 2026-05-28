@@ -348,18 +348,16 @@ app.get('/api/customers/:id', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: '고객 없음' });
     const customer = rows[0];
 
-    // ── 멤버십 등급 계산 (직전 4개월 구매금액 기준) ──────────────
+    // ── 멤버십 등급 계산 (최근 4개월 구매금액 기준, 이번 달 포함) ──
     const now = new Date();
-    const endMonth   = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startMonth = new Date(endMonth);
-    startMonth.setMonth(startMonth.getMonth() - 4);
+    const startMonth = new Date(now.getFullYear(), now.getMonth() - 4, 1);
 
     const [[amountRow]] = await pool.execute(
       `SELECT COALESCE(SUM(price), 0) AS total
        FROM purchase
        WHERE customer_id = ? AND status = 'PURCHASED'
-         AND purchased_at >= ? AND purchased_at < ?`,
-      [customer.id, startMonth, endMonth]
+         AND purchased_at >= ?`,
+      [customer.id, startMonth]
     );
     const amount = Number(amountRow.total);
 
@@ -728,7 +726,10 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
 
 app.post('/api/purchase', async (req, res) => {
   const { customer_id, product_id, size, price, status, partnerCustomerId } = req.body;
-  const partnerCustId    = partnerCustomerId ? Number(partnerCustomerId) : null;
+  // partnerCustomerId 또는 customer_id 둘 다 bigint 허용
+  const partnerCustId    = partnerCustomerId ? Number(partnerCustomerId)
+                         : customer_id       ? Number(customer_id)
+                         : null;
   const partnerProductId = toPartnerId(product_id);
 
   if (!partnerProductId) {
