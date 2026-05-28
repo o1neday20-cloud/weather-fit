@@ -106,24 +106,8 @@ function normalizeStatus(status) {
   return map[status] || String(status || '').toUpperCase();
 }
 
-// ── Fluentd 전송 ──────────────────────────────────────────────
-const FLUENTD_URL = process.env.FLUENTD_URL || 'http://210.104.76.135:9880/weatherfit.log';
-
-async function sendToFluentd(eventData) {
-  try {
-    await axios.post(
-      FLUENTD_URL,
-      { timestamp: new Date().toISOString(), ...eventData },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 3000 }
-    );
-    console.log(`[Fluentd] → ${eventData.event_type}`, JSON.stringify(eventData).slice(0, 80));
-  } catch (e) {
-    console.warn(`[Fluentd] 전송 실패 (${eventData.event_type}):`, e.message);
-  }
-}
-
 // ── Kafka Producer 초기화 ──────────────────────────────────────
-const KAFKA_BROKER = process.env.KAFKA_BROKER || 'localhost:29092';
+const KAFKA_BROKER = process.env.KAFKA_BROKER || 'localhost:9092';
 const kafka = new Kafka({
   clientId: 'weatherfit-api-server',
   brokers: [KAFKA_BROKER],
@@ -143,17 +127,20 @@ let kafkaReady = false;
   }
 })();
 
-async function sendToKafka(topic, data) {
+// 모든 이벤트를 'weatherfit-log-raw' 단일 토픽으로 전송
+const KAFKA_TOPIC = 'weatherfit-log-raw';
+
+async function sendToKafka(data) {
   if (kafkaReady) {
     try {
       await producer.send({
-        topic,
+        topic: KAFKA_TOPIC,
         messages: [{ value: JSON.stringify({ ...data, serverTimestamp: new Date().toISOString() }) }],
       });
-      console.log(`[Kafka] → ${topic}`, JSON.stringify(data).slice(0, 80));
+      console.log(`[Kafka] → ${KAFKA_TOPIC} [${data.event_type}]`, JSON.stringify(data).slice(0, 80));
       return true;
     } catch (e) {
-      console.warn(`[Kafka] 전송 실패 (${topic}) — DB 폴백:`, e.message);
+      console.warn(`[Kafka] 전송 실패 [${data.event_type}] — DB 폴백:`, e.message);
     }
   }
   return false;
@@ -253,6 +240,14 @@ app.post('/api/auth/register', async (req, res) => {
 
     const [rows] = await pool.execute('SELECT * FROM customer WHERE uid = ?', [uid]);
     const { password_hash, ...safeCustomer } = rows[0];
+    // SIGNUP Kafka 이벤트 (fire-and-forget)
+    sendToKafka({
+      event_type:  'SIGNUP',
+      customer_id: rows[0].id,
+      name:        name || null,
+      email:       email,
+      gender:      dbGender,
+    }).catch(() => {});
     // customer_id = uid (프론트 localStorage 호환)
     res.json({ success: true, customer: { ...safeCustomer, customer_id: uid } });
   } catch (err) {
@@ -327,13 +322,12 @@ app.get('/api/products/:id', async (req, res) => {
     const [rows] = await pool.execute('SELECT * FROM product WHERE id = ?', [numericId]);
     if (!rows.length) return res.status(404).json({ error: '상품 없음' });
 
-    // VIEW 이벤트 → Fluentd (fire-and-forget)
-    sendToFluentd({
+    // VIEW 이벤트 → Kafka (fire-and-forget)
+    sendToKafka({
       event_type:  'VIEW',
       customer_id: partnerCustId,
       product_id:  numericId,
-      timestamp:   new Date().toISOString(),
-    });
+    }).catch(() => {});
 
     const p = rows[0];
     res.json({ ...p, name: p.product_name, product_id: `prod_${p.id}` });
@@ -572,13 +566,12 @@ app.post('/api/wishlist', async (req, res) => {
       [custId, partnerProductId]
     );
 
-    sendToFluentd({
+    sendToKafka({
       event_type:  'WISHLIST',
       customer_id: custId,
       product_id:  partnerProductId,
       price:       productCheck[0].price ?? null,
-      timestamp:   new Date().toISOString(),
-    });
+    }).catch(() => {});
     res.json({ success: true });
   } catch (err) { console.error('[wishlist POST]', err.message); res.status(500).json({ error: '찜 추가 실패' }); }
 });
@@ -630,15 +623,14 @@ app.post('/api/wardrobe', async (req, res) => {
        color_id ?? null,
        parseInt(warmth ?? 1) || 1]                  // 숫자 강제 변환
     );
-    sendToFluentd({
-      event_type:  'WARDROBE',
+    sendToKafka({
+      event_type:  'WARDROBE_ADD',
       customer_id: custId,
       category:    (category || '').toUpperCase(),
       style:       (style    || '').toUpperCase(),
       color_id:    color_id ?? null,
       warmth,
-      timestamp:   new Date().toISOString(),
-    });
+    }).catch(() => {});
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '아이템 추가 실패' }); }
 });
@@ -648,12 +640,11 @@ app.delete('/api/wardrobe/:wardrobeId', async (req, res) => {
     const { wardrobeId } = req.params;
     const partnerCustomerId = req.query.partnerCustomerId;
     await pool.execute('DELETE FROM wardrobe_item WHERE id = ?', [wardrobeId]);
-    sendToFluentd({
+    sendToKafka({
       event_type:  'WARDROBE_DELETE',
       customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
       item_id:     wardrobeId,
-      timestamp:   new Date().toISOString(),
-    });
+    }).catch(() => {});
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '아이템 삭제 실패' }); }
 });
@@ -718,9 +709,13 @@ app.post('/api/purchase', async (req, res) => {
     const currentStatus = normalizeStatus(status || 'CART');
 
     if (currentStatus === 'PURCHASED') {
-      const sent = await sendToKafka('weatherfit.purchase', {
-        customer_id: partnerCustId, product_id: partnerProductId,
-        status: 'PURCHASED', size: size || null, price,
+      // Kafka 전송 시도 → 성공하면 Consumer가 DB 저장, 실패하면 직접 저장
+      const sent = await sendToKafka({
+        event_type:  'PURCHASE',
+        customer_id: partnerCustId,
+        product_id:  partnerProductId,
+        price,
+        size:        size || null,
       });
       if (!sent) {
         await pool.execute(
@@ -729,14 +724,6 @@ app.post('/api/purchase', async (req, res) => {
           [partnerCustId, partnerProductId, price, size || null]
         );
       }
-      sendToFluentd({
-        event_type:  'PURCHASE',
-        customer_id: partnerCustId,
-        product_id:  partnerProductId,
-        size:        size || null,
-        price,
-        timestamp:   new Date().toISOString(),
-      });
     } else {
       if (currentStatus === 'CART') {
         const [existing] = await pool.execute(
@@ -751,14 +738,13 @@ app.post('/api/purchase', async (req, res) => {
          VALUES (?, ?, ?, ?, ?, NOW())`,
         [partnerCustId, partnerProductId, price || 0, size || null, currentStatus]
       );
-      sendToFluentd({
+      sendToKafka({
         event_type:  'CART',
         customer_id: partnerCustId,
         product_id:  partnerProductId,
-        size:        size || null,
         price,
-        timestamp:   new Date().toISOString(),
-      });
+        size:        size || null,
+      }).catch(() => {});
     }
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '구매 처리 실패' }); }
@@ -822,18 +808,16 @@ app.post('/api/feedback', async (req, res) => {
        humidity, wind_speed, mappedCondition]
     );
 
-    sendToFluentd({
+    sendToKafka({
       event_type:        'FEEDBACK',
       customer_id:       partnerCustId,
-      actual_temp,
+      feedback:          dbFeedback,
+      temperature:       actual_temp,
       feels_like_temp,
       humidity,
       wind_speed,
       weather_condition: mappedCondition,
-      feedback:          dbFeedback,
-      feedback_date:     new Date().toISOString().split('T')[0],
-      timestamp:         new Date().toISOString(),
-    });
+    }).catch(() => {});
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '피드백 저장 실패' }); }
 });
@@ -852,11 +836,14 @@ app.post('/api/logs/behavior', async (req, res) => {
   try {
     const custId = customer_id ? await getPartnerCustomerId(customer_id) : null;
 
-    // Kafka 전송 — 성공 여부 무관, fire-and-forget (실패해도 DB 저장은 계속)
-    sendToKafka('weatherfit.behavior', {
-      customer_id: custId, event_type: dbEventType,
-      page_url: page_url ?? null, item_id: item_id ?? null,
-      duration: duration ?? null, scroll_depth: scroll_depth ?? null,
+    // Kafka 전송 — fire-and-forget (실패해도 DB 저장은 계속)
+    sendToKafka({
+      event_type:   dbEventType,
+      customer_id:  custId,
+      page_url:     page_url ?? null,
+      item_id:      item_id ?? null,
+      duration:     duration ?? null,
+      scroll_depth: scroll_depth ?? null,
     }).catch(e => console.warn('[Kafka behavior]', e.message));
 
     // DB 항상 직접 저장 (Kafka Consumer 없어도 데이터 보장)
