@@ -347,7 +347,44 @@ app.get('/api/customers/:id', async (req, res) => {
     }
     if (!rows.length) return res.status(404).json({ error: '고객 없음' });
     const customer = rows[0];
-    res.json({ ...customer, customer_id: customer.uid });
+
+    // ── 멤버십 등급 계산 (직전 4개월 구매금액 기준) ──────────────
+    const now = new Date();
+    const endMonth   = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startMonth = new Date(endMonth);
+    startMonth.setMonth(startMonth.getMonth() - 4);
+
+    const [[amountRow]] = await pool.execute(
+      `SELECT COALESCE(SUM(price), 0) AS total
+       FROM purchase
+       WHERE customer_id = ? AND status = 'PURCHASED'
+         AND purchased_at >= ? AND purchased_at < ?`,
+      [customer.id, startMonth, endMonth]
+    );
+    const amount = Number(amountRow.total);
+
+    const LEVELS = [
+      { name: 'BASIC',  min: 0 },
+      { name: 'SILVER', min: 100000 },
+      { name: 'GOLD',   min: 300000 },
+      { name: 'VIP',    min: 500000 },
+    ];
+    let currentLevel = LEVELS[0];
+    for (const l of LEVELS) {
+      if (amount >= l.min) currentLevel = l;
+    }
+    const nextLevel    = LEVELS[LEVELS.indexOf(currentLevel) + 1] || null;
+    const amountToNext = nextLevel ? nextLevel.min - amount : 0;
+
+    res.json({
+      ...customer,
+      customer_id:       customer.uid,
+      membership_amount: amount,
+      next_level:        nextLevel?.name || null,
+      next_level_amount: nextLevel?.min  || null,
+      amount_to_next:    Math.max(0, amountToNext),
+      next_update:       new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0],
+    });
   } catch (err) { console.error(err); res.status(500).json({ error: '고객 조회 실패' }); }
 });
 
