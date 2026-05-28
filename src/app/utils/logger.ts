@@ -216,30 +216,29 @@ export class Logger {
     });
   }
 
-  // ── 구매 완료 전송 ─────────────────────────────────────────
+  // ── 구매 완료 행동 로그 전송 ──────────────────────────────
+  // 구매 DB 기록(purchase 테이블)은 Checkout.tsx의 직접 fetch가 담당.
+  // 여기서는 behavior_log에 'purchase' 이벤트만 기록.
   static async logPurchase(items: Array<{
     productId: string; productName: string;
     size: string; quantity: number; price: number;
   }>, couponId?: string, discountAmt?: number) {
-    const userId = this.getUserId();
-    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const partnerCustId = getPartnerCustId();
     for (const item of items) {
-      const purchaseId = `pur_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const payload = {
-        purchase_id: purchaseId, customer_id: userId,
-        product_id: item.productId, status: 'paid',
-        size: item.size, price: item.price * item.quantity,
-        coupon_id: couponId ?? null, discount_amt: discountAmt ?? 0,
-        partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
+        event_type:  'purchase',
+        customer_id: partnerCustId,
+        page_url:    window.location.href,
+        item_id:     toItemId(item.productId),
       };
 
-      // Fluentd → Kafka weatherfit.purchase
+      // Fluentd → Kafka weatherfit-log-raw
       if (USE_FLUENTD) {
-        const ok = await sendToFluentd('weatherfit.purchase', payload);
+        const ok = await sendToFluentd('weatherfit-log-raw', payload);
         if (ok) continue;
       }
-      // 폴백: API 직접
-      await sendToApi('/purchase', payload);
+      // 폴백: behavior log API
+      await sendToApi('/logs/behavior', payload);
     }
   }
 
