@@ -28,9 +28,13 @@ export default function MyPage() {
   }>({ amount: 0, amount_to_next: 0, next_level: null, next_update: '' });
   const [couponCount, setCouponCount] = useState<number>(0);
   const [prefs, setPrefs] = useState({
-    cold_sensitivity: 0,
+    cold_sensitivity: 3,
     activity_level: 'medium',
     preferred_style: 'casual',
+    marketing_consent: false,
+    push_consent: false,
+    email_consent: false,
+    sms_consent: false,
   });
 
   useEffect(() => {
@@ -43,9 +47,13 @@ export default function MyPage() {
       setProfile(p);
       setIsLoggedIn(true);
       setPrefs({
-        cold_sensitivity: p.cold_sensitivity ?? 0,
+        cold_sensitivity: p.cold_sensitivity ?? 3,
         activity_level: p.activity_level ?? 'medium',
         preferred_style: p.preferred_style ?? 'casual',
+        marketing_consent: !!p.marketing_consent,
+        push_consent: !!p.push_consent,
+        email_consent: !!p.email_consent,
+        sms_consent: !!p.sms_consent,
       });
       // membership_level + 구매금액 — 서버 DB 우선, 실패 시 로컬 폴백
       fetch(`${API_BASE}/customers/${userId}`)
@@ -102,13 +110,32 @@ export default function MyPage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('userProfile');
-    localStorage.removeItem('userId');
+    // 계정 식별 키
+    const keysToRemove = [
+      'userProfile', 'userId', 'partnerCustomerId', 'customerUid',
+      // 피드백 / 날씨 캐시
+      'feedbackHistory', 'lastWeather', 'currentRecommendedOutfit', 'appLogs',
+      // 팝업
+      'popup_closed',
+    ];
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    // 사용자별 패턴 키 전부 제거
+    const patterns = ['wardrobe_', 'deletedWardrobe_', 'cart_', 'wishlist_', 'addressHistory_'];
+    Object.keys(localStorage).forEach(k => {
+      if (patterns.some(p => k.startsWith(p))) localStorage.removeItem(k);
+    });
+
+    // 세션 스토리지 팝업 키 제거
+    Object.keys(sessionStorage).forEach(k => {
+      if (k.startsWith('popup_closed_campaign_')) sessionStorage.removeItem(k);
+    });
+
     setProfile(null);
     setIsLoggedIn(false);
   };
 
-  const coldLabels = ['많이 추위 탐', '추위 탐', '보통', '더위 탐', '많이 더위 탐'];
+  const coldLabels = ['추위 많이 탐', '추위 탐', '보통', '더위 탐', '더위 많이 탐'];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -280,19 +307,19 @@ export default function MyPage() {
               {/* 추위 민감도 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  추위 민감도 — <span className="text-blue-600">{coldLabels[prefs.cold_sensitivity + 2]}</span>
+                  추위 민감도 — <span className="text-blue-600">{coldLabels[(prefs.cold_sensitivity ?? 3) - 1]}</span>
                 </label>
                 {editMode ? (
                   <>
-                    <input type="range" min="-2" max="2" value={prefs.cold_sensitivity}
+                    <input type="range" min="1" max="5" value={prefs.cold_sensitivity}
                       onChange={e => setPrefs({...prefs, cold_sensitivity: parseInt(e.target.value)})}
                       className="w-full accent-blue-600" />
                     <div className="flex justify-between text-xs text-gray-400 mt-0.5">
-                      <span>많이 추위 탐</span><span>많이 더위 탐</span>
+                      <span>추위 많이 탐</span><span>더위 많이 탐</span>
                     </div>
                   </>
                 ) : (
-                  <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">{coldLabels[prefs.cold_sensitivity + 2]}</div>
+                  <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">{coldLabels[(prefs.cold_sensitivity ?? 3) - 1]}</div>
                 )}
               </div>
 
@@ -311,6 +338,34 @@ export default function MyPage() {
                 ) : (
                   <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg capitalize">{prefs.preferred_style}</div>
                 )}
+              </div>
+
+              {/* 수신 동의 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">수신 동의</label>
+                <div className="space-y-3">
+                  {([
+                    ['marketing_consent', '마케팅 수신 동의'],
+                    ['push_consent',      '푸시 알림 동의'],
+                    ['email_consent',     '이메일 수신 동의'],
+                    ['sms_consent',       'SMS 수신 동의'],
+                  ] as [keyof typeof prefs, string][]).map(([key, label]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">{label}</span>
+                      <button
+                        type="button"
+                        onClick={() => editMode && setPrefs({ ...prefs, [key]: !prefs[key] })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          prefs[key] ? 'bg-blue-600' : 'bg-gray-200'
+                        } ${!editMode ? 'cursor-default' : 'cursor-pointer'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          prefs[key] ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

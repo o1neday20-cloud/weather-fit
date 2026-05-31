@@ -31,12 +31,13 @@ function sendAnonymousVisit(pageUrl: string) {
 }
 
 interface PopupState {
-  show:    boolean;
-  message: string;
+  show:       boolean;
+  message:    string;
+  campaignId: string | null;
 }
 
 export default function CampaignPopup() {
-  const [popup, setPopup] = useState<PopupState>({ show: false, message: '' });
+  const [popup, setPopup] = useState<PopupState>({ show: false, message: '', campaignId: null });
   const navigate   = useNavigate();
   const location   = useLocation();
 
@@ -49,20 +50,18 @@ export default function CampaignPopup() {
     const pageUrl = location.pathname;
 
     if (isLoggedIn()) {
-      // 로그인 사용자: 세션당 1회만 팝업
-      const shownKey = 'campaign_popup_shown';
-      if (sessionStorage.getItem(shownKey)) return;
-
       const customerId = localStorage.getItem('partnerCustomerId');
       if (!customerId) return;
 
       fetch(`${API_BASE}/campaigns/popup-check/customer?customerId=${customerId}`)
         .then(r => r.json())
         .then(data => {
-          if (data?.showPopup) {
-            sessionStorage.setItem(shownKey, 'true');
-            setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!' });
-          }
+          if (!data?.showPopup) return;
+          const cid = data.campaignId ? String(data.campaignId) : null;
+          // campaignId별로 세션 내 재노출 방지
+          const sessionKey = cid ? `popup_closed_campaign_${cid}` : 'popup_closed_campaign_unknown';
+          if (sessionStorage.getItem(sessionKey)) return;
+          setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!', campaignId: cid });
         })
         .catch(() => {});
     } else {
@@ -91,14 +90,19 @@ export default function CampaignPopup() {
   }, [location.pathname]);
 
   const handleClose = () => {
-    setPopup({ show: false, message: '' });
-    if (!isLoggedIn()) {
+    if (isLoggedIn()) {
+      const sessionKey = popup.campaignId
+        ? `popup_closed_campaign_${popup.campaignId}`
+        : 'popup_closed_campaign_unknown';
+      sessionStorage.setItem(sessionKey, 'true');
+    } else {
       localStorage.setItem('popup_closed', 'true');
     }
+    setPopup({ show: false, message: '', campaignId: null });
   };
 
   const handleSignup = () => {
-    setPopup({ show: false, message: '' });
+    setPopup({ show: false, message: '', campaignId: null });
     navigate('/auth', { state: { mode: 'register' } });
   };
 
