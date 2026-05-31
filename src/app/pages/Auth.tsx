@@ -298,6 +298,7 @@ export default function Auth() {
     if (!regForm.name.trim())       { setError('이름을 입력해주세요'); return; }
     if (!regForm.birth_date)        { setError('생년월일을 입력해주세요'); return; }
     if (!regForm.phone.trim())      { setError('전화번호를 입력해주세요'); return; }
+    if (!/^010-\d{4}-\d{4}$/.test(regForm.phone)) { setError('올바른 전화번호를 입력해주세요'); return; }
     if (regForm.gender === 'N')     { setError('성별을 선택해주세요'); return; }
     if (regForm.password !== regForm.passwordConfirm) { setError('비밀번호가 일치하지 않습니다'); return; }
     if (!regForm.agree_terms || !regForm.agree_privacy) { setError('필수 약관에 동의해주세요'); return; }
@@ -444,9 +445,21 @@ export default function Auth() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">전화번호 <span className="text-red-500">*</span></label>
                 <input type="tel" value={regForm.phone}
-                  onChange={e => setRegForm({...regForm, phone: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  placeholder="01000000000" />
+                  onChange={e => {
+                    // 숫자만 추출 후 010-XXXX-XXXX 형식으로 하이픈 자동 추가
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    let formatted = digits;
+                    if (digits.length > 7) formatted = digits.slice(0, 3) + '-' + digits.slice(3, 7) + '-' + digits.slice(7);
+                    else if (digits.length > 3) formatted = digits.slice(0, 3) + '-' + digits.slice(3);
+                    setRegForm({...regForm, phone: formatted});
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
+                    regForm.phone && !/^010-\d{4}-\d{4}$/.test(regForm.phone) ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                  placeholder="010-0000-0000" />
+                {regForm.phone && !/^010-\d{4}-\d{4}$/.test(regForm.phone) && (
+                  <p className="mt-1 text-xs text-red-500">올바른 전화번호를 입력해주세요</p>
+                )}
               </div>
 
               <div>
