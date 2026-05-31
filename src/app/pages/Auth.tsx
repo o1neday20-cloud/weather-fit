@@ -248,6 +248,7 @@ export default function Auth() {
   const [regForm, setRegForm]     = useState({
     name: '', email: '', password: '', passwordConfirm: '',
     phone: '', birth_date: '', gender: 'N', region_name: '',
+    cold_sensitivity: 3,
     agree_terms: false, agree_privacy: false,
     marketing_consent: false, push_consent: false, email_consent: false, sms_consent: false,
   });
@@ -479,6 +480,26 @@ export default function Auth() {
                   value={regForm.region_name}
                   onChange={name => setRegForm({...regForm, region_name: name})}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">추위 민감도</label>
+                <div className="flex gap-1.5">
+                  {([1,2,3,4,5] as const).map(v => {
+                    const labels: Record<number,string> = { 1:'추위 많이 탐', 2:'추위 탐', 3:'보통', 4:'더위 탐', 5:'더위 많이 탐' };
+                    return (
+                      <button key={v} type="button"
+                        onClick={() => setRegForm({...regForm, cold_sensitivity: v})}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          regForm.cold_sensitivity === v
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                        }`}>
+                        {labels[v]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>
