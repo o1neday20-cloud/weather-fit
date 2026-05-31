@@ -780,8 +780,8 @@ app.post('/api/purchase', async (req, res) => {
         if (existing.length > 0) return res.json({ success: true, duplicate: true });
       }
       await pool.execute(
-        `INSERT INTO purchase (customer_id, product_id, price, size, status, purchased_at)
-         VALUES (?, ?, ?, ?, ?, NOW())`,
+        `INSERT INTO purchase (customer_id, product_id, price, size, status)
+         VALUES (?, ?, ?, ?, ?)`,
         [partnerCustId, partnerProductId, price || 0, size || null, currentStatus]
       );
       sendToKafka({
