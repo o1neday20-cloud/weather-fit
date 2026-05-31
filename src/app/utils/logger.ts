@@ -106,7 +106,7 @@ function measureDuration(): number {
 // Fluentd 성공 여부와 무관하게 API는 항상 호출됨
 async function sendBehavior(payload: {
   customer_id:  number | null;
-  action:       ActionType;
+  event_type:   ActionType;
   page_url:     string;
   item_id?:     number | null;   // bigint 숫자만 (DB behavior_log.item_id 타입 일치)
   duration?:    number;          // 초 단위
@@ -208,7 +208,7 @@ export class Logger {
     // 2) 파이프라인으로 전송 (Fluentd or API)
     sendBehavior({
       customer_id:  getPartnerCustId(),
-      action:       toActionType(eventType),
+      event_type:   toActionType(eventType),
       page_url:     window.location.href,
       item_id:      toItemId(eventData?.productId ?? eventData?.itemId),
       duration:     computedDuration,

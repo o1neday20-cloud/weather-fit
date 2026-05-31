@@ -248,7 +248,7 @@ app.post('/api/auth/register', async (req, res) => {
     const { password_hash, ...safeCustomer } = rows[0];
     // SIGNUP Kafka 이벤트 (fire-and-forget)
     sendToKafka({
-      event_type:  'SIGNUP',
+      event_type:  'signup',
       customer_id: rows[0].id,
       name:        name || null,
       email:       email,
@@ -330,7 +330,7 @@ app.get('/api/products/:id', async (req, res) => {
 
     // VIEW 이벤트 → Kafka (fire-and-forget)
     sendToKafka({
-      event_type:  'VIEW',
+      event_type:  'page_view',
       customer_id: partnerCustId,
       product_id:  numericId,
     }).catch(() => {});
@@ -608,7 +608,7 @@ app.post('/api/wishlist', async (req, res) => {
     );
 
     sendToKafka({
-      event_type:  'WISHLIST',
+      event_type:  'wishlist_add',
       customer_id: custId,
       product_id:  partnerProductId,
       price:       productCheck[0].price ?? null,
@@ -665,7 +665,7 @@ app.post('/api/wardrobe', async (req, res) => {
        parseInt(warmth ?? 1) || 1]                  // 숫자 강제 변환
     );
     sendToKafka({
-      event_type:  'WARDROBE_ADD',
+      event_type:  'wardrobe_add',
       customer_id: custId,
       category:    (category || '').toUpperCase(),
       style:       (style    || '').toUpperCase(),
@@ -682,7 +682,7 @@ app.delete('/api/wardrobe/:wardrobeId', async (req, res) => {
     const partnerCustomerId = req.query.partnerCustomerId;
     await pool.execute('DELETE FROM wardrobe_item WHERE id = ?', [wardrobeId]);
     sendToKafka({
-      event_type:  'WARDROBE_DELETE',
+      event_type:  'wardrobe_delete',
       customer_id: partnerCustomerId ? Number(partnerCustomerId) : null,
       item_id:     wardrobeId,
     }).catch(() => {});
@@ -755,7 +755,7 @@ app.post('/api/purchase', async (req, res) => {
     if (currentStatus === 'PURCHASED') {
       // Kafka 전송 시도 → 성공하면 Consumer가 DB 저장, 실패하면 직접 저장
       const sent = await sendToKafka({
-        event_type:  'PURCHASE',
+        event_type:  'purchase',
         customer_id: partnerCustId,
         product_id:  partnerProductId,
         price,
@@ -783,7 +783,7 @@ app.post('/api/purchase', async (req, res) => {
         [partnerCustId, partnerProductId, price || 0, size || null, currentStatus]
       );
       sendToKafka({
-        event_type:  'CART',
+        event_type:  'add_to_cart',
         customer_id: partnerCustId,
         product_id:  partnerProductId,
         price,
@@ -853,7 +853,7 @@ app.post('/api/feedback', async (req, res) => {
     );
 
     sendToKafka({
-      event_type:        'FEEDBACK',
+      event_type:        'feedback',
       customer_id:       partnerCustId,
       feedback:          dbFeedback,
       temperature:       actual_temp,
