@@ -217,6 +217,7 @@ app.post('/api/auth/register', async (req, res) => {
   const {
     name, email, phone, birth_date, gender, password,
     marketing_consent, push_consent, email_consent, sms_consent,
+    cold_sensitivity,
   } = req.body;
   if (!email) return res.status(400).json({ error: '이메일 필요' });
   try {
@@ -236,10 +237,11 @@ app.post('/api/auth/register', async (req, res) => {
     await pool.execute(
       `INSERT INTO customer
          (uid, password_hash, name, email, phone, birth_date, gender,
-          join_date, membership_level,
+          join_date, membership_level, cold_sensitivity,
           marketing_consent, push_consent, email_consent, sms_consent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, 'BASIC', ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, 'BASIC', ?, ?, ?, ?, ?)`,
       [uid, passwordHash, name || null, email, phone || null, birth_date || null, dbGender,
+       parseInt(cold_sensitivity ?? 3) || 3,
        marketing_consent ? 1 : 0, push_consent ? 1 : 0,
        email_consent ? 1 : 0, sms_consent ? 1 : 0]
     );

@@ -55,7 +55,7 @@ export default function MyPage() {
         email_consent: !!p.email_consent,
         sms_consent: !!p.sms_consent,
       });
-      // membership_level + 구매금액 — 서버 DB 우선, 실패 시 로컬 폴백
+      // membership_level + 구매금액 + prefs — 서버 DB 우선, 실패 시 로컬 폴백
       fetch(`${API_BASE}/customers/${userId}`)
         .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
@@ -72,6 +72,17 @@ export default function MyPage() {
             next_level:    data.next_level  ?? null,
             next_update:   data.next_update ?? '',
           });
+          // DB에서 가져온 최신 prefs로 덮어쓰기 (cold_sensitivity 포함)
+          setPrefs(prev => ({
+            ...prev,
+            cold_sensitivity: data.cold_sensitivity ?? prev.cold_sensitivity,
+            activity_level:   data.activity_level   ?? prev.activity_level,
+            preferred_style:  data.preferred_style  ?? prev.preferred_style,
+            marketing_consent: data.marketing_consent != null ? !!data.marketing_consent : prev.marketing_consent,
+            push_consent:      data.push_consent     != null ? !!data.push_consent       : prev.push_consent,
+            email_consent:     data.email_consent    != null ? !!data.email_consent      : prev.email_consent,
+            sms_consent:       data.sms_consent      != null ? !!data.sms_consent        : prev.sms_consent,
+          }));
         })
         .catch(() => {});
       // 쿠폰 수 로드
