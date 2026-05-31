@@ -1,0 +1,15 @@
+{
+  "name": "weatherfit-kafka-consumer",
+  "version": "1.0.0",
+  "description": "Kafka Consumer — Kafka 메시지를 MySQL에 저장",
+  "main": "consumer.js",
+  "scripts": {
+    "start": "node consumer.js",
+    "dev": "node --watch consumer.js"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4",
+    "mysql2": "^3.6.5",
+    "dotenv": "^16.3.1"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" init)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" add backend/server.js src/app/utils/logger.ts src/app/pages/Feedback.tsx)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" commit -m \"feat: feedback region_name 추가 및 Fluentd 중복 전송 제거\")",
+      "Bash(git -C \"C:\\\\weather-fit-main\" config user.email \"weatherfit@team.local\")",
+      "Bash(git -C \"C:\\\\weather-fit-main\" config user.name \"WeatherFit\")",
+      "Bash(git -C \"C:\\\\weather-fit-main\" add backend/server.js src/app/utils/logger.ts src/app/pages/ProductDetail.tsx src/app/pages/Shop.tsx)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" commit -m \"fix: event_type 소문자 스네이크케이스 통일\")",
+      "Bash(git -C \"C:\\\\weather-fit-main\" add src/app/components/CampaignPopup.tsx src/app/components/Layout.tsx src/app/routes.tsx src/app/App.tsx src/app/pages/Auth.tsx)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" commit -m \"feat: 비로그인/로그인 캠페인 팝업 추가\")",
+      "Bash(git -C \"C:\\\\weather-fit-main\" remote add origin https://github.com/o1neday20-cloud/weather-fit.git)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" branch -M main)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" push -u origin main)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" pull origin main --allow-unrelated-histories --no-edit)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" add -A)",
+      "Bash(git -C \"C:\\\\weather-fit-main\" commit -m \"chore: 전체 프로젝트 파일 추가\")"
+    ]
+  }
+}

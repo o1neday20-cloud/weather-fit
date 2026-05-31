@@ -1,0 +1,238 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
+import Navigation from '../components/Navigation';
+import ClothingItem from '../components/ClothingItem';
+import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
+import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
+import { getRecommendedProducts, mockProducts } from '../utils/products';
+import { Logger } from '../utils/logger';
+import { wardrobeKey } from '../utils/storage';
+import { Sparkles, RefreshCw, ShoppingBag } from 'lucide-react';
+
+export default function Outfit() {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [feelTemp, setFeelTemp] = useState<number>(0);
+  const [recommendedOutfit, setRecommendedOutfit] = useState<ClothingItemType[]>([]);
+  const [colorReason, setColorReason] = useState<string>('');
+  const [purchaseSuggestions, setPurchaseSuggestions] = useState<ClothingItemType[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [recommendSeed, setRecommendSeed] = useState(Date.now());
+
+  useEffect(() => {
+    loadRecommendations(recommendSeed);
+    Logger.log('page_view', { page: 'outfit' });
+  }, []);
+
+  const loadRecommendations = async (seed: number) => {
+    setLoading(true);
+    try {
+      // 날씨 API: 3초 내 응답 없으면 캐시 또는 기본값으로 폴백
+      const cachedWeather = localStorage.getItem('lastWeather');
+      const fallbackWeather: WeatherData = cachedWeather
+        ? JSON.parse(cachedWeather)
+        : { temperature: 20, humidity: 50, windSpeed: 2, condition: '맑음', location: '서울 기준 날씨' };
+
+      let weatherData: WeatherData;
+      try {
+        weatherData = await Promise.race([
+          getCurrentWeather(),
+          new Promise<WeatherData>((_, reject) =>
+            setTimeout(() => reject(new Error('weather_timeout')), 3000)
+          ),
+        ]);
+      } catch {
+        weatherData = fallbackWeather;
+      }
+      setWeather(weatherData);
+
+      const userPrefString = localStorage.getItem('userPreference');
+      const userPref: UserPreference = userPrefString
+        ? JSON.parse(userPrefString)
+        : { coldSensitivity: 0, activityLevel: 'medium', style: 'casual' };
+
+      const tempPrediction = predictFeelTemperature(weatherData, userPref);
+      setFeelTemp(tempPrediction.perceived);
+
+      // wardrobeKey()로 옷장 데이터 읽기
+      const wardrobeString = localStorage.getItem(wardrobeKey());
+      const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
+
+      const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, seed, mockProducts);
+      setRecommendedOutfit(outfitResult.items);
+      setColorReason(outfitResult.colorReason);
+
+      const ownedIds = wardrobe.map(item => item.id);
+      const suggestions = getRecommendedProducts(tempPrediction.perceived, ownedIds);
+      setPurchaseSuggestions(suggestions);
+
+      Logger.log('outfit_generated', {
+        feelTemperature: tempPrediction.perceived,
+        outfitCount: outfitResult.items.length,  // outfit → outfitResult.items (정의된 변수 사용)
+        suggestionsCount: suggestions.length,
+        location: weatherData.location,
+      });
+    } catch (e) {
+      console.error('[Outfit] 로딩 오류:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center pb-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="max-w-screen-xl mx-auto px-4 py-6">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">코디 추천</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              체감온도 {feelTemp}°C 기준
+            </p>
+          </div>
+          <button
+            onClick={() => { const s = Date.now(); setRecommendSeed(s); loadRecommendations(s); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <RefreshCw className="w-4 h-4" />
+            새로고침
+          </button>
+        </div>
+
+        {/* AI 추천 설명 */}
+        <div className="bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl p-4 mb-6 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-5 h-5" />
+            <h2 className="font-semibold">AI 추천 분석</h2>
+          </div>
+          <p className="text-sm opacity-90">
+            오늘 기온은 {weather?.temperature}°C이지만, 습도와 풍속을 고려하면 
+            당신에게는 <span className="font-bold">{feelTemp}°C</span>로 느껴질 것입니다.
+          </p>
+        </div>
+
+        {/* 추천 코디 */}
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            {recommendedOutfit.length > 0 ? '내 옷장에서 선택한 코디' : '오늘 날씨에 맞는 추천 아이템'}
+          </h2>
+          
+          {colorReason && recommendedOutfit.length > 0 && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-purple-50 rounded-xl border border-purple-100">
+              <span className="text-purple-400 text-sm">✨</span>
+              <p className="text-sm text-purple-700 font-medium">{colorReason}</p>
+            </div>
+          )}
+
+          {recommendedOutfit.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+              {recommendedOutfit.map((item) => (
+                <ClothingItem 
+                  key={item.id} 
+                  item={item}
+                  showActions={false}
+                />
+              ))}
+            </div>
+          ) : (
+            <div>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
+                <span className="text-amber-500">👗</span>
+                <p className="text-sm text-amber-700">
+                  옷장이 비어있어요. 오늘 날씨에 어울리는 쇼핑 상품을 추천해드릴게요!
+                </p>
+              </div>
+              {purchaseSuggestions.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                  {purchaseSuggestions.slice(0, 3).map((item) => (
+                    <Link key={item.id} to={`/product/${item.id}`}>
+                      <ClothingItem item={item} showActions={false} />
+                    </Link>
+                  ))}
+                </div>
+              )}
+              <Link
+                to="/shop"
+                className="flex items-center justify-center gap-2 w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                쇼핑하러 가기
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* 쇼핑몰 추천 상품 */}
+        {purchaseSuggestions.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-semibold text-gray-900">
+                  오늘 날씨에 어울리는 추천 상품
+                </h2>
+              </div>
+              <Link to="/shop" className="text-sm text-blue-600 hover:text-blue-700">
+                더보기
+              </Link>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {purchaseSuggestions.map((item) => (
+                <Link key={item.id} to={`/product/${item.id}`}>
+                  <ClothingItem 
+                    item={item}
+                    showActions={false}
+                  />
+                </Link>
+              ))}
+            </div>
+
+            <div className="bg-blue-50 rounded-lg p-4 mt-4">
+              <p className="text-sm text-blue-900">
+                💡 <strong>팁:</strong> 쇼핑몰에서 구매한 상품은 자동으로 내 옷장에 추가할 수 있어요!
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 온도별 가이드 */}
+        <div className="mt-6 bg-white rounded-xl p-4 shadow-sm">
+          <h3 className="font-semibold text-gray-900 mb-3">온도별 옷차림 가이드</h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">5°C 이하</span>
+              <span className="text-gray-900">패딩, 두꺼운 코트, 목도리</span>
+            </div>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">5°C ~ 10°C</span>
+              <span className="text-gray-900">코트, 가죽자켓, 니트</span>
+            </div>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">10°C ~ 15°C</span>
+              <span className="text-gray-900">자켓, 후드, 긴팔</span>
+            </div>
+            <div className="flex justify-between py-2 border-b">
+              <span className="text-gray-600">15°C ~ 20°C</span>
+              <span className="text-gray-900">얇은 가디건, 맨투맨, 청바지</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-gray-600">20°C 이상</span>
+              <span className="text-gray-900">반팔, 반바지, 원피스</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Navigation />
+    </div>
+  );
+}
