@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { Logger } from '../utils/logger';
 import { searchLocations } from '../utils/weatherApi';
-import { grantWelcomeCoupons } from '../utils/coupon';
 import { getAnonymousId } from '../components/CampaignPopup';
 import { MapPin, X } from 'lucide-react';
 
@@ -100,8 +99,6 @@ function registerLocally(data: any) {
   localStorage.setItem('localUsers', JSON.stringify(existing));
   localStorage.setItem('userId', userId);
   localStorage.setItem('userProfile', JSON.stringify(profile));
-  // 신규가입 쿠폰 묶음 지급
-  grantWelcomeCoupons(userId);
   return profile;
 }
 
@@ -320,7 +317,6 @@ export default function Auth() {
       }
       // 팝업 통해 가입한 경우 비로그인 → 회원 전환 기록
       fetch(`${API_BASE}/anonymous-users/${anonymousId}/converted`, { method: 'PATCH' }).catch(() => {});
-      grantWelcomeCoupons(data.customer.customer_id);
       mergeGuestWishlist(data.customer.customer_id);
       mergeGuestWardrobe(data.customer.customer_id);
       callPartnerSignup(regForm); // 팀원 서버 연동 (fire-and-forget)

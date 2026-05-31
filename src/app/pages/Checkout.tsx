@@ -4,7 +4,7 @@ import { CartItem, PRODUCT_COLORS } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey, cartKey, loadAddressHistory, saveAddress, SavedAddress } from '../utils/storage';
 import { CheckCircle2, Ticket, X, Check, ChevronDown, User, Clock } from 'lucide-react';
-import { loadMyCoupons, calcDiscount, consumeCoupon, isCouponValid, CouponItem } from '../utils/coupon';
+import { calcDiscount, isCouponValid, CouponItem } from '../utils/coupon';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
@@ -58,11 +58,12 @@ export default function Checkout() {
     // ── 이전 배송지 불러오기 ──────────────────
     setAddressHistory(loadAddressHistory());
 
-    if (userId) {
-      fetch(`${API_BASE}/coupons/my/${userId}`, { signal: AbortSignal.timeout(3000) })
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    if (partnerCustomerId) {
+      fetch(`${API_BASE}/coupons/my/${partnerCustomerId}`, { signal: AbortSignal.timeout(3000) })
         .then(r => r.ok ? r.json() : Promise.reject())
         .then(setMyCoupons)
-        .catch(() => setMyCoupons(loadMyCoupons(userId)));
+        .catch(() => {});
     }
     Logger.log('page_view', { page: 'checkout' });
   }, [navigate]);
@@ -216,10 +217,7 @@ export default function Checkout() {
       saveAddress(formData);
       setAddressHistory(loadAddressHistory());
     }
-    // 사용된 쿠폰 목록에서 즉시 제거
     if (couponInfo) {
-      const userId = localStorage.getItem('userId');
-      if (userId) consumeCoupon(userId, couponInfo.coupon_id);
       setMyCoupons(prev => prev.filter(c => c.coupon_id !== couponInfo.coupon_id));
     }
     setProcessing(false); setCompleted(true);

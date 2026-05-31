@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import Navigation from '../components/Navigation';
 import { Ticket, ArrowLeft, Tag, Copy, Check, Clock } from 'lucide-react';
-import { loadMyCoupons, CouponItem, isCouponValid } from '../utils/coupon';
+import { CouponItem, isCouponValid } from '../utils/coupon';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
 
@@ -22,17 +22,17 @@ export default function Coupons() {
   useEffect(() => {
     const userId = localStorage.getItem('userId');
     if (!userId) { navigate('/auth'); return; }
-    fetchCoupons(userId);
+    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    if (!partnerCustomerId) { setLoading(false); return; }
+    fetchCoupons(partnerCustomerId);
   }, [navigate]);
 
-  const fetchCoupons = async (userId: string) => {
+  const fetchCoupons = async (customerId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/coupons/my/${userId}`, { signal: AbortSignal.timeout(3000) });
-      if (res.ok) { setCoupons(await res.json()); setLoading(false); return; }
+      const res = await fetch(`${API_BASE}/coupons/my/${customerId}`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) { setCoupons(await res.json()); }
     } catch {}
-    // 로컬 폴백 — 만료 자동 정리
-    setCoupons(loadMyCoupons(userId));
     setLoading(false);
   };
 
