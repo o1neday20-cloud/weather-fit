@@ -38,11 +38,11 @@ const STEPS = [
     title: '추위와 더위는?',
     subtitle: '같은 온도에서 남들보다...',
     options: [
-      { value: -2, label: '많이 추위 탐',  emoji: '🥶', desc: '항상 다른 사람보다 춥게 느껴요' },
-      { value: -1, label: '추위 탐',       emoji: '😰', desc: '조금 추위를 더 타는 편이에요' },
-      { value:  0, label: '보통',          emoji: '😊', desc: '남들이랑 비슷하게 느껴요' },
-      { value:  1, label: '더위 탐',       emoji: '😅', desc: '조금 더위를 더 타는 편이에요' },
-      { value:  2, label: '많이 더위 탐',  emoji: '🥵', desc: '항상 다른 사람보다 덥게 느껴요' },
+      { value: 1, label: '추위 많이 탐',  emoji: '🥶', desc: '항상 다른 사람보다 춥게 느껴요' },
+      { value: 2, label: '추위 탐',       emoji: '😰', desc: '조금 추위를 더 타는 편이에요' },
+      { value: 3, label: '보통',          emoji: '😊', desc: '남들이랑 비슷하게 느껴요' },
+      { value: 4, label: '더위 탐',       emoji: '😅', desc: '조금 더위를 더 타는 편이에요' },
+      { value: 5, label: '더위 많이 탐',  emoji: '🥵', desc: '항상 다른 사람보다 덥게 느껴요' },
     ],
   },
 ];
@@ -53,7 +53,7 @@ export default function Onboarding() {
   const [prefs, setPrefs] = useState<Prefs>({
     preferred_style: '',
     activity_level: '',
-    cold_sensitivity: 0,
+    cold_sensitivity: 3,
   });
   const [selected, setSelected] = useState<string | number | null>(null);
 
@@ -93,13 +93,12 @@ export default function Onboarding() {
         // 팀원 서버에 cold_sensitivity / preferred_style / activity_level 업데이트
         const partnerCustomerId = localStorage.getItem('partnerCustomerId');
         if (partnerCustomerId) {
-          const coldValue = (updated.cold_sensitivity as number) + 3; // -2..2 → 1..5
           try {
             fetch(`http://210.104.76.135:8080/api/customers/${Number(partnerCustomerId)}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                cold_sensitivity: coldValue,
+                cold_sensitivity: updated.cold_sensitivity, // 이미 1~5
                 preferred_style: String(updated.preferred_style).toUpperCase(),
                 activity_level: String(updated.activity_level).toUpperCase(),
               }),
@@ -111,7 +110,7 @@ export default function Onboarding() {
       }
       // userPreference도 함께 저장 (Outfit 페이지에서 사용)
       localStorage.setItem('userPreference', JSON.stringify({
-        coldSensitivity: updated.cold_sensitivity,
+        coldSensitivity: updated.cold_sensitivity, // 1~5
         activityLevel: updated.activity_level,
         style: updated.preferred_style,
       }));
