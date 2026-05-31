@@ -1,0 +1,134 @@
+import { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router';
+
+const API_BASE    = import.meta.env.VITE_API_URL     || 'http://localhost:4000/api';
+const FLUENTD_URL = import.meta.env.VITE_FLUENTD_URL || 'http://210.104.76.135:9880';
+
+// 비로그인 UUID 취득 (없으면 생성)
+export function getAnonymousId(): string {
+  let id = localStorage.getItem('anonymous_id');
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem('anonymous_id', id);
+  }
+  return id;
+}
+
+// 비로그인 방문 로그 → Fluentd
+function sendAnonymousVisit(pageUrl: string) {
+  const anonymousId = getAnonymousId();
+  fetch(`${FLUENTD_URL}/weatherfit.anonymous`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      anonymous_id: anonymousId,
+      page_url:     pageUrl,
+      user_agent:   navigator.userAgent,
+      visited_at:   new Date().toISOString(),
+    }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+interface PopupState {
+  show:    boolean;
+  message: string;
+}
+
+export default function CampaignPopup() {
+  const [popup, setPopup] = useState<PopupState>({ show: false, message: '' });
+  const navigate   = useNavigate();
+  const location   = useLocation();
+
+  const isLoggedIn = (): boolean => {
+    const userId = localStorage.getItem('userId');
+    return !!userId && !userId.startsWith('anon_');
+  };
+
+  useEffect(() => {
+    const pageUrl = location.pathname;
+
+    if (isLoggedIn()) {
+      // 로그인 사용자: 세션당 1회만 팝업
+      const shownKey = 'campaign_popup_shown';
+      if (sessionStorage.getItem(shownKey)) return;
+
+      const customerId = localStorage.getItem('partnerCustomerId');
+      if (!customerId) return;
+
+      fetch(`${API_BASE}/campaigns/popup-check/customer?customerId=${customerId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data?.showPopup) {
+            sessionStorage.setItem(shownKey, 'true');
+            setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!' });
+          }
+        })
+        .catch(() => {});
+    } else {
+      // 비로그인 사용자: Fluentd 방문 로그 전송
+      sendAnonymousVisit(pageUrl);
+
+      // 닫기 이미 눌렀으면 팝업 생략
+      if (localStorage.getItem('popup_closed') === 'true') return;
+
+      const anonymousId = getAnonymousId();
+      fetch(`${API_BASE}/campaigns/popup-check?anonymousId=${anonymousId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data?.showPopup) {
+            setPopup({ show: true, message: data.message || '회원가입하고 특별 혜택을 받아보세요!' });
+            // 팝업 노출 기록
+            fetch(`${API_BASE}/anonymous-users/${anonymousId}/popup-shown`, {
+              method: 'PATCH',
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+  // pathname 변경(페이지 이동)마다 체크
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  const handleClose = () => {
+    setPopup({ show: false, message: '' });
+    if (!isLoggedIn()) {
+      localStorage.setItem('popup_closed', 'true');
+    }
+  };
+
+  const handleSignup = () => {
+    setPopup({ show: false, message: '' });
+    navigate('/auth', { state: { mode: 'register' } });
+  };
+
+  if (!popup.show) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+        <div className="text-center">
+          <div className="text-3xl mb-2">🎁</div>
+          <h2 className="text-lg font-bold text-gray-900">특별 혜택 안내</h2>
+          <p className="text-sm text-gray-600 mt-2 whitespace-pre-line">{popup.message}</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          {!isLoggedIn() && (
+            <button
+              onClick={handleSignup}
+              className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+            >
+              회원가입하기
+            </button>
+          )}
+          <button
+            onClick={handleClose}
+            className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
