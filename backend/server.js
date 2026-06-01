@@ -859,6 +859,18 @@ app.post('/api/purchase', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: '구매 처리 실패' }); }
 });
 
+// 장바구니 아이템 삭제  DELETE /api/cart/:purchaseId
+app.delete('/api/cart/:purchaseId', async (req, res) => {
+  try {
+    const { purchaseId } = req.params;
+    await pool.execute(
+      "DELETE FROM purchase WHERE id = ? AND status = 'CART'",
+      [purchaseId]
+    );
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: '장바구니 삭제 실패' }); }
+});
+
 app.patch('/api/purchase/:purchaseId/status', async (req, res) => {
   const { status } = req.body;
   const dbStatus = normalizeStatus(status); // 대문자 통일: CART / PURCHASED / WISHLIST

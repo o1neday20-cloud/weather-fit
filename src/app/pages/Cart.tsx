@@ -30,7 +30,11 @@ export default function Cart() {
         if (res.ok) {
           const dbCart: { purchase_id?: number; id?: number; product_id: number }[] = await res.json();
           cart.forEach(item => {
-            const match = dbCart.find(r => r.product_id === item.product.id);
+            // item.product.id는 'prod_N' 또는 숫자 — 숫자로 변환해 DB product_id(숫자)와 비교
+            const numericProductId = typeof item.product.id === 'string'
+              ? parseInt(String(item.product.id).replace(/^prod_/i, ''), 10)
+              : Number(item.product.id);
+            const match = dbCart.find(r => Number(r.product_id) === numericProductId);
             if (match) item.purchaseId = match.purchase_id ?? match.id;
           });
         }
