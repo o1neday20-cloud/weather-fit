@@ -180,7 +180,11 @@ export default function Shop() {
       setWishlist(next);
       const stored: any[] = JSON.parse(localStorage.getItem(wishlistKey()) || '[]');
       localStorage.setItem(wishlistKey(), JSON.stringify(stored.filter((i: any) => (i.product_id||i.id) !== product.id)));
-      if (userId) fetch(`${API_BASE}/wishlist/${userId}/${product.id}`, { method: 'DELETE' }).catch(() => {});
+      // 로그인/비로그인 모두 DELETE API 호출 — 서버에서 behavior_log 기록
+      const anonId = localStorage.getItem('anonymous_id');
+      const deleteId = userId || 'anon';
+      const anonQs = !userId && anonId ? `?anonymous_id=${encodeURIComponent(anonId)}` : '';
+      fetch(`${API_BASE}/wishlist/${encodeURIComponent(deleteId)}/${product.id}${anonQs}`, { method: 'DELETE' }).catch(() => {});
       Logger.log('wishlist_remove', { productId: product.id });
     } else {
       next.add(product.id);

@@ -670,13 +670,33 @@ app.post('/api/wishlist', async (req, res) => {
 
 app.delete('/api/wishlist/:customerId/:productId', async (req, res) => {
   try {
+    const { anonymous_id } = req.query;
     const custId = await getPartnerCustomerId(req.params.customerId);
-    if (!custId) return res.status(400).json({ error: 'customer 없음' });
     const partnerProductId = toPartnerId(req.params.productId);
+
+    if (custId) {
+      // 로그인 사용자: customer_id 기준 삭제
+      await pool.execute(
+        `DELETE FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
+        [custId, partnerProductId]
+      );
+    } else if (anonymous_id) {
+      // 비로그인 사용자: anonymous_id 기준 삭제
+      await pool.execute(
+        `DELETE FROM purchase WHERE anonymous_id = ? AND product_id = ? AND status = 'WISHLIST'`,
+        [anonymous_id, partnerProductId]
+      );
+    } else {
+      return res.status(400).json({ error: 'customer 또는 anonymous_id 필요' });
+    }
+
+    // 행동 로그 기록 (비로그인 포함)
     await pool.execute(
-      `DELETE FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
-      [custId, partnerProductId]
-    );
+      `INSERT INTO behavior_log (customer_id, event_type, item_id, page_url, timestamp, created_at)
+       VALUES (?, 'wishlist_remove', ?, NULL, NOW(), NOW())`,
+      [custId || null, partnerProductId || null]
+    ).catch(() => {}); // 로그 실패해도 삭제는 완료로 처리
+
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '찜 삭제 실패' }); }
 });
