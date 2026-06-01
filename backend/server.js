@@ -518,6 +518,40 @@ app.post('/api/coupons/issue-campaign', async (req, res) => {
   }
 });
 
+// ── 쿠폰 직접 발급 (status='ISSUED'인 경우만 중복으로 판단) ───────
+app.post('/api/coupons/issue', async (req, res) => {
+  const { customer_id, coupon_id } = req.body;
+  if (!customer_id || !coupon_id)
+    return res.status(400).json({ error: 'customer_id, coupon_id 필요' });
+  try {
+    // ISSUED 상태인 쿠폰만 중복 판단 (USED/EXPIRED는 재발급 허용)
+    const [dup] = await pool.execute(
+      `SELECT id FROM customer_coupon
+       WHERE customer_id = ? AND coupon_id = ? AND status = 'ISSUED'`,
+      [customer_id, coupon_id]
+    );
+    if (dup.length > 0) return res.json({ success: false, duplicate: true });
+
+    // 만료일: 쿠폰의 expired_at 또는 valid_days 기준 계산
+    const [[cpn]] = await pool.execute(
+      'SELECT expired_at, valid_days FROM coupon WHERE id = ?', [coupon_id]
+    );
+    if (!cpn) return res.status(404).json({ error: '쿠폰 없음' });
+    const expiredAt = cpn.expired_at
+      ? cpn.expired_at
+      : cpn.valid_days
+        ? new Date(Date.now() + cpn.valid_days * 86400000).toISOString().slice(0, 10)
+        : null;
+
+    await pool.execute(
+      `INSERT INTO customer_coupon (customer_id, coupon_id, issued_at, expired_at, status)
+       VALUES (?, ?, NOW(), ?, 'ISSUED')`,
+      [customer_id, coupon_id, expiredAt]
+    );
+    res.json({ success: true });
+  } catch (err) { console.error('[coupons/issue]', err.message); res.status(500).json({ error: '쿠폰 발급 실패' }); }
+});
+
 // ── 내 쿠폰 목록 조회 ─────────────────────────────────────────
 // DDL 기준:
 //   coupon: coupon_name, code, type(PERCENT/AMOUNT), min_order_amount, max_discount_amount, status(ACTIVE/...)
@@ -537,8 +571,8 @@ app.get('/api/coupons/my/:customerId', async (req, res) => {
               cc.expired_at         AS valid_until
        FROM customer_coupon cc
        JOIN coupon c ON cc.coupon_id = c.id
-       WHERE cc.customer_id = ? AND cc.used_at IS NULL
-         AND cc.status = 'ISSUED' AND cc.expired_at >= CURRENT_DATE
+       WHERE cc.customer_id = ? AND cc.status = 'ISSUED'
+         AND cc.expired_at >= CURRENT_DATE
          AND c.status = 'ACTIVE'
        ORDER BY cc.expired_at ASC`,
       [req.params.customerId]
@@ -752,7 +786,7 @@ app.get('/api/purchase/:customerId/cart', async (req, res) => {
 });
 
 app.post('/api/purchase', async (req, res) => {
-  const { customer_id, product_id, size, price, status, partnerCustomerId } = req.body;
+  const { customer_id, product_id, size, price, status, partnerCustomerId, coupon_id } = req.body;
   // partnerCustomerId 또는 customer_id 둘 다 bigint 허용
   const partnerCustId    = partnerCustomerId ? Number(partnerCustomerId)
                          : customer_id       ? Number(customer_id)
@@ -788,6 +822,16 @@ app.post('/api/purchase', async (req, res) => {
            VALUES (?, ?, ?, ?, 'PURCHASED', NOW())`,
           [partnerCustId, partnerProductId, price, size || null]
         );
+      }
+      // 쿠폰 사용 처리 — customer_coupon status → USED
+      if (coupon_id && partnerCustId) {
+        const orderId = `ord_${Date.now()}`;
+        await pool.execute(
+          `UPDATE customer_coupon
+           SET status = 'USED', used_at = NOW(), order_id = ?
+           WHERE customer_id = ? AND coupon_id = ? AND status = 'ISSUED'`,
+          [orderId, partnerCustId, coupon_id]
+        ).catch(() => {}); // 쿠폰 처리 실패해도 구매는 완료
       }
     } else {
       if (currentStatus === 'CART') {

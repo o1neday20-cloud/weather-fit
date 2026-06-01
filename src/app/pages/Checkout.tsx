@@ -123,19 +123,25 @@ export default function Checkout() {
     }
     // ── 1. DB 저장 (필수) — 아이템별 POST /api/purchase ──────────
     const partnerCustIdNum = Number(localStorage.getItem('partnerCustomerId')) || null;
+    let couponSent = false; // 쿠폰은 첫 번째 아이템에만 포함 (중복 방지)
     for (const item of cartItems) {
       const numericProductId = Number(String(item.product.id).replace(/^prod_/i, ''));
       try {
+        const body: Record<string, any> = {
+          customer_id: partnerCustIdNum,
+          product_id:  numericProductId,
+          size:        item.size,
+          price:       item.product.price * item.quantity,
+          status:      'PURCHASED',
+        };
+        if (!couponSent && couponInfo?.coupon_id) {
+          body.coupon_id = couponInfo.coupon_id;
+          couponSent = true;
+        }
         await fetch(`${API_BASE}/purchase`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_id: partnerCustIdNum,
-            product_id:  numericProductId,
-            size:        item.size,
-            price:       item.product.price * item.quantity,
-            status:      'PURCHASED',
-          }),
+          body: JSON.stringify(body),
           keepalive: true,
         });
       } catch {}
