@@ -179,7 +179,7 @@ export default function ProductDetail() {
           sizes: local?.sizes || ['S', 'M', 'L', 'XL'],
           colors: local?.colors || [{ name: data.color_name || '기본', hex: data.hex_code || '#888888' }],
           inStock: data.in_stock === 1,
-          imageUrl: local?.imageUrl || data.image_url,
+          imageUrl: data.image_url || local?.imageUrl,
           isOwned: false,
         };
         initProduct(merged);
