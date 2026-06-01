@@ -19,15 +19,16 @@ export function predictFeelTemperature(
 ): FeelTemperature {
   const { temperature, humidity, windSpeed } = weather;
 
-  const humidityAdjustment = (humidity - 50) * 0.1;
+  const humidityAdjustment = (humidity - 50) * 0.05;
   const windAdjustment = windSpeed * -0.3;
-  const personalAdjustment = userPref.coldSensitivity * 2;
+  const personalAdjustment = userPref.coldSensitivity * 1.5;
   const activityAdjustment =
-    userPref.activityLevel === 'high' ? 3 :
+    userPref.activityLevel === 'high' ? 2 :
     userPref.activityLevel === 'medium' ? 1 : 0;
 
-  const totalAdjustment =
+  const rawAdjustment =
     humidityAdjustment + windAdjustment + personalAdjustment + activityAdjustment;
+  const totalAdjustment = Math.max(-7, Math.min(7, rawAdjustment));
 
   return {
     actual: temperature,
