@@ -126,13 +126,18 @@ export default function MyPage() {
       'userProfile', 'userId', 'partnerCustomerId', 'customerUid',
       // 피드백 / 날씨 캐시
       'feedbackHistory', 'lastWeather', 'currentRecommendedOutfit', 'appLogs',
+      // 개인설정 / 온보딩
+      'userPreference',
       // 팝업
       'popup_closed',
     ];
     keysToRemove.forEach(k => localStorage.removeItem(k));
 
     // 사용자별 패턴 키 전부 제거
-    const patterns = ['wardrobe_', 'deletedWardrobe_', 'cart_', 'wishlist_', 'addressHistory_'];
+    const patterns = [
+      'wardrobe_', 'deletedWardrobe_', 'cart_', 'wishlist_', 'addressHistory_',
+      'feedback_', 'temperature_', 'weather_',
+    ];
     Object.keys(localStorage).forEach(k => {
       if (patterns.some(p => k.startsWith(p))) localStorage.removeItem(k);
     });

@@ -159,17 +159,20 @@ export default function Wardrobe() {
     );
     const colorId = matchedColor?.id ?? null;
 
+    const userId = localStorage.getItem('userId');
+    const isAnon = !userId || userId.startsWith('anon_');
     fetch(`${API_BASE}/wardrobe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         item_id: item.id,
-        customer_id: localStorage.getItem('userId'),
+        customer_id: isAnon ? null : userId,
         category: item.category,
         style: item.style,
         warmth: item.warmth,
         color_id: colorId,
         partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
+        anonymous_id: isAnon ? localStorage.getItem('anonymous_id') : null,
       }),
     }).catch(() => {});
   };

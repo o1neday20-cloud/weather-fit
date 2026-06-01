@@ -217,7 +217,7 @@ app.post('/api/auth/register', async (req, res) => {
   const {
     name, email, phone, birth_date, gender, password,
     marketing_consent, push_consent, email_consent, sms_consent,
-    cold_sensitivity,
+    cold_sensitivity, anonymous_id,
   } = req.body;
   if (!email) return res.status(400).json({ error: '이메일 필요' });
   try {
@@ -256,6 +256,15 @@ app.post('/api/auth/register', async (req, res) => {
       email:       email,
       gender:      dbGender,
     }).catch(() => {});
+    // 비로그인 데이터를 회원 계정으로 연동 (Spring Boot)
+    if (anonymous_id) {
+      fetch(`http://210.104.76.135:8080/api/anonymous-users/${anonymous_id}/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: rows[0].id }),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    }
     // customer_id = uid (프론트 localStorage 호환)
     res.json({ success: true, customer: { ...safeCustomer, customer_id: uid } });
   } catch (err) {
@@ -574,7 +583,7 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 });
 
 app.post('/api/wishlist', async (req, res) => {
-  const { customer_id, product_id, partnerCustomerId } = req.body;
+  const { customer_id, product_id, partnerCustomerId, anonymous_id } = req.body;
   try {
     // 1) partnerCustomerId(숫자)가 있으면 직접 사용, 없으면 uid → DB 조회
     //    → 변환된 숫자 custId로 중복 체크 및 INSERT
@@ -583,8 +592,12 @@ app.post('/api/wishlist', async (req, res) => {
       : await getPartnerCustomerId(customer_id);
     const partnerProductId = toPartnerId(product_id);
 
-    if (!custId || !partnerProductId) {
-      return res.status(400).json({ error: 'customer_id 또는 product_id 변환 실패' });
+    // customer_id 없어도 anonymous_id 있으면 허용 (비로그인 찜)
+    if (!custId && !anonymous_id) {
+      return res.status(400).json({ error: 'customer_id 또는 anonymous_id 필요' });
+    }
+    if (!partnerProductId) {
+      return res.status(400).json({ error: 'product_id 변환 실패' });
     }
 
     const [productCheck] = await pool.execute(
@@ -594,19 +607,24 @@ app.post('/api/wishlist', async (req, res) => {
       return res.status(404).json({ error: '존재하지 않는 상품입니다', code: 'PRODUCT_NOT_FOUND' });
     }
 
-    // 2) 변환된 숫자 custId로 중복 체크
-    const [exist] = await pool.execute(
-      `SELECT id FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
-      [custId, partnerProductId]
-    );
+    // 2) 중복 체크 (custId 기준, 비로그인은 anonymous_id 기준)
+    const [exist] = custId
+      ? await pool.execute(
+          `SELECT id FROM purchase WHERE customer_id = ? AND product_id = ? AND status = 'WISHLIST'`,
+          [custId, partnerProductId]
+        )
+      : await pool.execute(
+          `SELECT id FROM purchase WHERE anonymous_id = ? AND product_id = ? AND status = 'WISHLIST'`,
+          [anonymous_id, partnerProductId]
+        );
     // 3) 중복이면 INSERT 없이 반환
     if (exist.length > 0) return res.json({ success: true, duplicate: true });
 
     // 4) 중복 아니면 INSERT
     await pool.execute(
-      `INSERT INTO purchase (customer_id, product_id, price, size, status, purchased_at)
-       VALUES (?, ?, 0, NULL, 'WISHLIST', NOW())`,
-      [custId, partnerProductId]
+      `INSERT INTO purchase (customer_id, anonymous_id, product_id, price, size, status, purchased_at)
+       VALUES (?, ?, ?, 0, NULL, 'WISHLIST', NOW())`,
+      [custId || null, anonymous_id || null, partnerProductId]
     );
 
     sendToKafka({
@@ -652,15 +670,16 @@ app.get('/api/wardrobe/:customerId', async (req, res) => {
 });
 
 app.post('/api/wardrobe', async (req, res) => {
-  const { customer_id, category, style, color_id, warmth, partnerCustomerId } = req.body;
+  const { customer_id, category, style, color_id, warmth, partnerCustomerId, anonymous_id } = req.body;
   // customer_id(uid_xxx) 우선, 없으면 partnerCustomerId(bigint) 사용
   const custId = await getPartnerCustomerId(customer_id || partnerCustomerId);
-  if (!custId) return res.status(400).json({ error: 'customer_id 변환 실패' });
+  // customer_id 없을 때 anonymous_id가 있으면 허용 (비로그인 저장)
+  if (!custId && !anonymous_id) return res.status(400).json({ error: 'customer_id 또는 anonymous_id 필요' });
   try {
     await pool.execute(
-      `INSERT INTO wardrobe_item (customer_id, category, style, color_id, warmth, registered_date)
-       VALUES (?, ?, ?, ?, ?, CURRENT_DATE)`,
-      [custId,
+      `INSERT INTO wardrobe_item (customer_id, anonymous_id, category, style, color_id, warmth, registered_date)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_DATE)`,
+      [custId || null, anonymous_id || null,
        (category || 'TOP').toUpperCase(),           // 대문자 통일
        (style    || 'CASUAL').toUpperCase(),         // 대문자 통일
        color_id ?? null,
@@ -815,7 +834,7 @@ app.patch('/api/purchase/:purchaseId/status', async (req, res) => {
 app.post('/api/feedback', async (req, res) => {
   const {
     customer_id, actual_temp, feels_like_temp,
-    humidity, wind_speed, weather_condition, feedback, partnerCustomerId, region_name,
+    humidity, wind_speed, weather_condition, feedback, partnerCustomerId, region_name, anonymous_id,
   } = req.body;
 
   const partnerCustId = partnerCustomerId ? Number(partnerCustomerId) : null;
@@ -847,10 +866,10 @@ app.post('/api/feedback', async (req, res) => {
     // actual_temp → temperature 컬럼
     await pool.execute(
       `INSERT INTO temperature_feedback
-         (customer_id, feedback, temperature, feels_like_temp,
+         (customer_id, anonymous_id, feedback, temperature, feels_like_temp,
           humidity, wind_speed, weather_condition, feedback_date, region_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, ?)`,
-      [partnerCustId, dbFeedback, actual_temp, feels_like_temp,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, ?)`,
+      [partnerCustId, anonymous_id || null, dbFeedback, actual_temp, feels_like_temp,
        humidity, wind_speed, mappedCondition, region_name ?? null]
     );
 
@@ -1029,7 +1048,10 @@ app.get('/api/admin/customers/:id', adminAuth, async (req, res) => {
     if (!customer) return res.status(404).json({ error: '고객 없음' });
 
     const [purchases] = await pool.execute(
-      `SELECT pu.*, p.product_name AS product_name, p.brand, p.image_url
+      `SELECT pu.id, pu.customer_id, pu.product_id, pu.size, pu.status,
+              pu.purchased_at, pu.created_at,
+              COALESCE(NULLIF(pu.price, 0), p.price) AS price,
+              p.product_name, p.brand, p.image_url
        FROM purchase pu
        LEFT JOIN product p ON pu.product_id = p.id
        WHERE pu.customer_id = ? ORDER BY pu.purchased_at DESC`,

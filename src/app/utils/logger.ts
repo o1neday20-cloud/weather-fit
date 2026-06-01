@@ -243,6 +243,7 @@ export class Logger {
   }) {
     const userId = this.getUserId();
     const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+    const isAnon = !partnerCustomerId || userId.startsWith('anon_');
     const feedbackId = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const payload = {
       feedback_id: feedbackId, customer_id: userId,
@@ -254,6 +255,7 @@ export class Logger {
       feedback: data.feedback,
       region_name: data.regionName ?? null,
       partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
+      anonymous_id: isAnon ? (localStorage.getItem('anonymous_id') ?? null) : null,
     };
 
     // Fluentd → Kafka weatherfit.feedback

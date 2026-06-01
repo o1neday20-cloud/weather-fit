@@ -188,18 +188,18 @@ export default function Shop() {
       const stored: any[] = JSON.parse(localStorage.getItem(wishlistKey()) || '[]');
       stored.push({ product_id: product.id, name: product.name, brand: product.brand, price: product.price, image_url: product.imageUrl, hex_code: product.color });
       localStorage.setItem(wishlistKey(), JSON.stringify(stored));
-      if (userId) {
-        const partnerCid = localStorage.getItem('partnerCustomerId');
-        fetch(`${API_BASE}/wishlist`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_id: userId,
-            product_id: product.id,
-            partnerCustomerId: partnerCid ? Number(partnerCid) : null,
-          }),
-        }).catch(() => {});
-      }
+      const partnerCid = localStorage.getItem('partnerCustomerId');
+      const isAnon = !userId || userId.startsWith('anon_');
+      fetch(`${API_BASE}/wishlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: isAnon ? null : userId,
+          product_id: product.id,
+          partnerCustomerId: partnerCid ? Number(partnerCid) : null,
+          anonymous_id: isAnon ? localStorage.getItem('anonymous_id') : null,
+        }),
+      }).catch(() => {});
       Logger.log('wishlist_add', { productId: product.id });
     }
   };
