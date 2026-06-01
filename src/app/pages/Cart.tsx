@@ -34,7 +34,8 @@ export default function Cart() {
     localStorage.setItem(cartKey(), JSON.stringify(updated));
   };
 
-  const removeItem = (index: number) => {
+  const removeItem = async (index: number) => {
+    const item = cartItems[index];
     const updated = cartItems.filter((_, i) => i !== index);
     // 인덱스 재정렬
     const newSelected = new Set<number>();
@@ -46,6 +47,28 @@ export default function Cart() {
     setSelectedIndices(newSelected);
     localStorage.setItem(cartKey(), JSON.stringify(updated));
     Logger.log('remove_from_cart', { itemIndex: index });
+
+    // DB에서도 삭제
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const customerId = localStorage.getItem('userId');
+      let purchaseId = (item as any).purchaseId;
+
+      if (!purchaseId && customerId) {
+        const res = await fetch(`${apiUrl}/purchase/${customerId}/cart`);
+        if (res.ok) {
+          const dbCart = await res.json();
+          const match = dbCart.find((r: any) => r.product_id === item.product.id);
+          if (match) purchaseId = match.purchase_id ?? match.id;
+        }
+      }
+
+      if (purchaseId) {
+        await fetch(`${apiUrl}/cart/${purchaseId}`, { method: 'DELETE' });
+      }
+    } catch {
+      // DB 삭제 실패해도 로컬 삭제는 유지
+    }
   };
 
   const toggleItem = (index: number) => {
