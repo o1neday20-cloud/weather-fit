@@ -1,5 +1,6 @@
 import { ClothingItem as ClothingItemType } from '../utils/aiModel';
 import { Trash2, ShoppingCart, Pencil } from 'lucide-react';
+import { Link } from 'react-router';
 
 interface ClothingItemProps {
   item: ClothingItemType;
@@ -74,9 +75,13 @@ export default function ClothingItem({ item, onDelete, onEdit, showActions = tru
             </p>
           </div>
           {!item.isOwned && (
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+            <Link
+              to={`/product/${item.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full hover:bg-blue-200 transition-colors"
+            >
               구매필요
-            </span>
+            </Link>
           )}
         </div>
 
@@ -143,10 +148,13 @@ export default function ClothingItem({ item, onDelete, onEdit, showActions = tru
                 )}
               </>
             ) : (
-              <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Link
+                to={`/product/${item.id}`}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
                 <ShoppingCart className="w-4 h-4" />
                 <span className="text-sm">구매하기</span>
-              </button>
+              </Link>
             )}
           </div>
         )}

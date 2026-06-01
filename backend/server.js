@@ -602,7 +602,7 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
        FROM purchase pu
        JOIN product p ON pu.product_id = p.id
        WHERE pu.customer_id = ? AND pu.status = 'WISHLIST'
-       ORDER BY pu.purchased_at DESC`,
+       ORDER BY pu.id DESC`,
       [custId]
     );
     // product_id: p.id 숫자 그대로 반환
@@ -654,7 +654,7 @@ app.post('/api/wishlist', async (req, res) => {
       : Number(productCheck[0].price) || 0;
     await pool.execute(
       `INSERT INTO purchase (customer_id, anonymous_id, product_id, price, size, status, purchased_at)
-       VALUES (?, ?, ?, ?, NULL, 'WISHLIST', NOW())`,
+       VALUES (?, ?, ?, ?, NULL, 'WISHLIST', NULL)`,
       [custId || null, anonymous_id || null, partnerProductId, insertPrice]
     );
 
@@ -1120,7 +1120,7 @@ app.get('/api/admin/customers/:id', adminAuth, async (req, res) => {
               p.product_name, p.brand, p.image_url
        FROM purchase pu
        LEFT JOIN product p ON pu.product_id = p.id
-       WHERE pu.customer_id = ? ORDER BY pu.purchased_at DESC`,
+       WHERE pu.customer_id = ? ORDER BY pu.purchased_at IS NULL ASC, pu.purchased_at DESC, pu.id DESC`,
       [customer.id]
     );
     const [feedbacks] = await pool.execute(
