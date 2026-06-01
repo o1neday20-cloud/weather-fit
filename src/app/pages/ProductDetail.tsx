@@ -196,10 +196,8 @@ export default function ProductDetail() {
     };
   }, [id]);
 
-  const addToCart = () => {
-    if (!product || !selectedSize) return;
-    if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) { requireLogin(); return; }
-
+  const addToCartItem = () => {
+    if (!product || !selectedSize) return false;
     const cart = JSON.parse(localStorage.getItem(cartKey()) || '[]');
     const existingItem = cart.find(
       (item: any) => item.product.id === product.id && item.size === selectedSize && item.selectedColor?.hex === selectedColor?.hex
@@ -211,6 +209,14 @@ export default function ProductDetail() {
     }
     localStorage.setItem(cartKey(), JSON.stringify(cart));
     window.dispatchEvent(new Event('storage'));
+    return true;
+  };
+
+  const addToCart = () => {
+    if (!product || !selectedSize) return;
+    if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) { requireLogin(); return; }
+
+    addToCartItem();
     Logger.log('add_to_cart', {
       productId: product.id,
       productName: product.name,
@@ -237,6 +243,13 @@ export default function ProductDetail() {
     }
 
     setShowModal(true);
+  };
+
+  const buyNow = () => {
+    if (!product || !selectedSize) return;
+    if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) { requireLogin(); return; }
+    addToCartItem();
+    navigate('/checkout');
   };
 
   if (isLoading) {
@@ -463,13 +476,21 @@ export default function ProductDetail() {
               </div>
 
               {/* 구매 버튼 */}
-              <button
-                onClick={addToCart}
-                className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-              >
-                <ShoppingBag className="w-5 h-5" />
-                장바구니 담기
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={addToCart}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-4 border-2 border-blue-600 text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
+                >
+                  <ShoppingBag className="w-5 h-5" />
+                  장바구니 담기
+                </button>
+                <button
+                  onClick={buyNow}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  바로 구매
+                </button>
+              </div>
             </div>
 
             {/* 상품 정보 테이블 */}

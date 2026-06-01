@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import Navigation from '../components/Navigation';
-import { Ticket, ArrowLeft, Tag, Copy, Check, Clock } from 'lucide-react';
+import { Ticket, ArrowLeft, Tag, Clock } from 'lucide-react';
 import { CouponItem, isCouponValid } from '../utils/coupon';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api';
@@ -17,7 +17,6 @@ export default function Coupons() {
   const navigate = useNavigate();
   const [coupons, setCoupons] = useState<CouponItem[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [copied, setCopied]     = useState('');
 
   useEffect(() => {
     const userId = localStorage.getItem('userId');
@@ -34,13 +33,6 @@ export default function Coupons() {
       if (res.ok) { setCoupons(await res.json()); }
     } catch {}
     setLoading(false);
-  };
-
-  const handleCopy = (code: string) => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(code);
-      setTimeout(() => setCopied(''), 2000);
-    });
   };
 
   const discountText = (c: CouponItem) =>
@@ -130,40 +122,15 @@ export default function Coupons() {
                         </p>
                       )}
 
-                      <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center mt-2">
                         <div className={`flex items-center gap-1 text-xs ${urgencyColor(c.valid_until)}`}>
                           <Clock className="w-3 h-3" />
                           {urgencyText(c.valid_until)}
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <code className="text-[11px] bg-gray-100 px-1.5 py-0.5 rounded font-mono text-gray-600">
-                            {c.code}
-                          </code>
-                          <button
-                            onClick={() => handleCopy(c.code)}
-                            className={`p-1 rounded transition-colors ${
-                              copied === c.code ? 'text-green-500' : 'text-gray-400 hover:text-blue-500'
-                            }`}
-                          >
-                            {copied === c.code
-                              ? <Check className="w-3.5 h-3.5" />
-                              : <Copy className="w-3.5 h-3.5" />}
-                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* 만료 프로그레스 바 */}
-                  {days <= 30 && (
-                    <div className="h-1 bg-gray-100">
-                      <div
-                        className={`h-full transition-all ${isUrgent ? 'bg-red-400' : 'bg-yellow-400'}`}
-                        style={{ width: `${Math.max(5, (days / 30) * 100)}%` }}
-                      />
-                    </div>
-                  )}
                 </div>
               );
             })}
