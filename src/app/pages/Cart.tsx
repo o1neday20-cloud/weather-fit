@@ -20,8 +20,25 @@ export default function Cart() {
     Logger.log('page_view', { page: 'cart' });
   }, [navigate]);
 
-  const loadCart = () => {
-    const cart = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+  const loadCart = async () => {
+    const cart: (CartItem & { purchaseId?: number })[] = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+
+    try {
+      const customerId = localStorage.getItem('partnerCustomerId');
+      if (customerId) {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase/${customerId}/cart`);
+        if (res.ok) {
+          const dbCart: { purchase_id?: number; id?: number; product_id: number }[] = await res.json();
+          cart.forEach(item => {
+            const match = dbCart.find(r => r.product_id === item.product.id);
+            if (match) item.purchaseId = match.purchase_id ?? match.id;
+          });
+        }
+      }
+    } catch {
+      // DB 조회 실패해도 로컬 장바구니는 표시
+    }
+
     setCartItems(cart);
     // 기본적으로 모든 아이템 선택
     setSelectedIndices(new Set(cart.map((_: CartItem, i: number) => i)));
@@ -50,21 +67,9 @@ export default function Cart() {
 
     // DB에서도 삭제
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      const customerId = localStorage.getItem('userId');
-      let purchaseId = (item as any).purchaseId;
-
-      if (!purchaseId && customerId) {
-        const res = await fetch(`${apiUrl}/purchase/${customerId}/cart`);
-        if (res.ok) {
-          const dbCart = await res.json();
-          const match = dbCart.find((r: any) => r.product_id === item.product.id);
-          if (match) purchaseId = match.purchase_id ?? match.id;
-        }
-      }
-
+      const purchaseId = (item as any).purchaseId;
       if (purchaseId) {
-        await fetch(`${apiUrl}/cart/${purchaseId}`, { method: 'DELETE' });
+        await fetch(`${import.meta.env.VITE_API_URL}/cart/${purchaseId}`, { method: 'DELETE' });
       }
     } catch {
       // DB 삭제 실패해도 로컬 삭제는 유지
