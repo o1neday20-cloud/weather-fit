@@ -196,6 +196,7 @@ export default function Shop() {
         body: JSON.stringify({
           customer_id: isAnon ? null : userId,
           product_id: product.id,
+          price: product.price,
           partnerCustomerId: partnerCid ? Number(partnerCid) : null,
           anonymous_id: isAnon ? localStorage.getItem('anonymous_id') : null,
         }),

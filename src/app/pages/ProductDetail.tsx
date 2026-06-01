@@ -97,11 +97,18 @@ export default function ProductDetail() {
   // 찜 토글
   const handleToggleWishlist = () => {
     if (!product) return;
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
+    const userId = localStorage.getItem('userId');
+    const partnerCid = localStorage.getItem('partnerCustomerId');
+    const isAnon = !userId || userId.startsWith('anon_');
     const stored: any[] = JSON.parse(localStorage.getItem(wishlistKey()) || '[]');
     if (isWished) {
       const next = stored.filter((i: any) => (i.product_id || i.id) !== product.id);
       localStorage.setItem(wishlistKey(), JSON.stringify(next));
       setIsWished(false);
+      if (userId) {
+        fetch(`${API_BASE}/wishlist/${userId}/${product.id}`, { method: 'DELETE' }).catch(() => {});
+      }
     } else {
       stored.push({
         product_id: product.id, name: product.name, brand: product.brand,
@@ -109,6 +116,17 @@ export default function ProductDetail() {
       });
       localStorage.setItem(wishlistKey(), JSON.stringify(stored));
       setIsWished(true);
+      fetch(`${API_BASE}/wishlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: isAnon ? null : userId,
+          product_id: product.id,
+          price: product.price,
+          partnerCustomerId: partnerCid ? Number(partnerCid) : null,
+          anonymous_id: isAnon ? localStorage.getItem('anonymous_id') : null,
+        }),
+      }).catch(() => {});
     }
     Logger.log(isWished ? 'wishlist_remove' : 'wishlist_add', { productId: product.id });
   };

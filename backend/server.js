@@ -617,7 +617,7 @@ app.get('/api/wishlist/:customerId', async (req, res) => {
 });
 
 app.post('/api/wishlist', async (req, res) => {
-  const { customer_id, product_id, partnerCustomerId, anonymous_id } = req.body;
+  const { customer_id, product_id, partnerCustomerId, anonymous_id, price } = req.body;
   try {
     // 1) partnerCustomerId(숫자)가 있으면 직접 사용, 없으면 uid → DB 조회
     //    → 변환된 숫자 custId로 중복 체크 및 INSERT
@@ -654,11 +654,14 @@ app.post('/api/wishlist', async (req, res) => {
     // 3) 중복이면 INSERT 없이 반환
     if (exist.length > 0) return res.json({ success: true, duplicate: true });
 
-    // 4) 중복 아니면 INSERT
+    // 4) 중복 아니면 INSERT — price: 프론트에서 전달된 값, 없으면 product 테이블에서 조회
+    const insertPrice = (price != null && Number(price) > 0)
+      ? Number(price)
+      : Number(productCheck[0].price) || 0;
     await pool.execute(
       `INSERT INTO purchase (customer_id, anonymous_id, product_id, price, size, status, purchased_at)
-       VALUES (?, ?, ?, 0, NULL, 'WISHLIST', NOW())`,
-      [custId || null, anonymous_id || null, partnerProductId]
+       VALUES (?, ?, ?, ?, NULL, 'WISHLIST', NOW())`,
+      [custId || null, anonymous_id || null, partnerProductId, insertPrice]
     );
 
     sendToKafka({
