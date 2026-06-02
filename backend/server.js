@@ -864,7 +864,7 @@ app.post('/api/purchase', async (req, res) => {
         price,
         size:        size || null,
       }).catch(() => {});
-      return res.json({ success: true, purchaseId: (insertResult as any).insertId ?? null });
+      return res.json({ success: true, purchaseId: insertResult.insertId ?? null });
     }
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '구매 처리 실패' }); }
