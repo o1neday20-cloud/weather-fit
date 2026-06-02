@@ -4,10 +4,26 @@ import Navigation from '../components/Navigation';
 import ClothingItem from '../components/ClothingItem';
 import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
-import { getRecommendedProducts, mockProducts } from '../utils/products';
+import { mockProducts } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { Sparkles, RefreshCw, ShoppingBag } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
+
+/** API 상품 응답을 ClothingItemType 호환 형태로 변환 */
+function mapApiProduct(row: any): ClothingItemType & { imageUrl?: string } {
+  return {
+    id:       row.product_id ?? `prod_${row.id}`,
+    name:     row.name || row.product_name || '',
+    category: (row.category || 'top').toLowerCase() as ClothingItemType['category'],
+    warmth:   Number(row.warmth) || 1,
+    color:    '#9CA3AF',
+    style:    (row.style || 'casual').toLowerCase() as ClothingItemType['style'],
+    isOwned:  false,
+    imageUrl: row.image_url || undefined,
+  };
+}
 
 export default function Outfit() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -16,6 +32,7 @@ export default function Outfit() {
   const [colorReason, setColorReason] = useState<string>('');
   const [purchaseSuggestions, setPurchaseSuggestions] = useState<ClothingItemType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dbProducts, setDbProducts] = useState<(ClothingItemType & { imageUrl?: string })[]>([]);
 
   const [recommendSeed, setRecommendSeed] = useState(Date.now());
 
@@ -27,6 +44,22 @@ export default function Outfit() {
   const loadRecommendations = async (seed: number) => {
     setLoading(true);
     try {
+      // DB 상품 목록 조회 (이미 캐시된 경우 재사용)
+      let shopProducts = dbProducts;
+      if (shopProducts.length === 0) {
+        try {
+          const res = await fetch(`${API_BASE}/products`);
+          if (res.ok) {
+            const rows = await res.json();
+            shopProducts = rows.map(mapApiProduct);
+            setDbProducts(shopProducts);
+          }
+        } catch {
+          // API 실패 시 mockProducts 폴백
+        }
+      }
+      const shopFallback = shopProducts.length > 0 ? shopProducts : (mockProducts as unknown as (ClothingItemType & { imageUrl?: string })[]);
+
       // 날씨 API: 3초 내 응답 없으면 캐시 또는 기본값으로 폴백
       const cachedWeather = localStorage.getItem('lastWeather');
       const fallbackWeather: WeatherData = cachedWeather
@@ -58,12 +91,19 @@ export default function Outfit() {
       const wardrobeString = localStorage.getItem(wardrobeKey());
       const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
-      const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, seed, mockProducts);
+      const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, seed, shopFallback);
       setRecommendedOutfit(outfitResult.items);
       setColorReason(outfitResult.colorReason);
 
+      // DB 상품 중 온도에 맞는 것을 추천 상품으로 선택
       const ownedIds = wardrobe.map(item => item.id);
-      const suggestions = getRecommendedProducts(tempPrediction.perceived, ownedIds);
+      const minWarmth = tempPrediction.perceived < 5 ? 5
+                      : tempPrediction.perceived < 10 ? 4
+                      : tempPrediction.perceived < 15 ? 3
+                      : tempPrediction.perceived < 20 ? 2 : 1;
+      const suggestions = shopFallback
+        .filter(p => !ownedIds.includes(p.id) && p.warmth >= minWarmth)
+        .slice(0, 6);
       setPurchaseSuggestions(suggestions);
 
       Logger.log('outfit_generated', {
