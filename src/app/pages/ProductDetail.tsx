@@ -195,19 +195,21 @@ export default function ProductDetail() {
     return () => {
       const duration = Math.round((Date.now() - enterTime) / 1000);
       if (duration > 1) Logger.log('product_view', { productId: id, duration });
-      // Fluentd VIEW 체류시간 이벤트
+      // 상품 상세 체류시간 이벤트 → /api/logs/behavior 직접 전송
       const numericProductId = parseInt(String(id).replace(/[^0-9]/g, ''), 10) || null;
       const cid = localStorage.getItem('partnerCustomerId');
       if (duration > 1 && numericProductId) {
         try {
-          fetch('http://210.104.76.135:9880/weatherfit.log', {
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
+          fetch(`${API_BASE_URL}/logs/behavior`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              event_type: 'page_view',
+              event_type: 'product_view',
               customer_id: cid ? Number(cid) : null,
-              product_id: numericProductId,
+              item_id: numericProductId,
               duration,
+              page_url: window.location.href,
             }),
             keepalive: true,
           }).catch(() => {});

@@ -105,7 +105,7 @@ export default function Shop() {
   const navigate = useNavigate();
   const maxScrollDepthRef = useRef(0);
 
-  // 스크롤 깊이 추적 → 페이지 이탈 시 Fluentd SCROLL 이벤트 전송
+  // 스크롤 깊이 추적 → 페이지 이탈 시 /api/logs/behavior로 SCROLL 이벤트 전송
   useEffect(() => {
     maxScrollDepthRef.current = 0;
     const handleScroll = () => {
@@ -120,7 +120,7 @@ export default function Shop() {
       const partnerCid = localStorage.getItem('partnerCustomerId');
       if (maxScrollDepthRef.current > 0) {
         try {
-          fetch('http://210.104.76.135:9880/weatherfit.log', {
+          fetch(`${API_BASE}/logs/behavior`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
