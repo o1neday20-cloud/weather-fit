@@ -773,7 +773,7 @@ app.get('/api/purchase/:customerId/history', async (req, res) => {
        FROM purchase pu
        JOIN product p ON pu.product_id = p.id
        WHERE pu.customer_id = ? AND pu.status = 'PURCHASED'
-       ORDER BY pu.purchased_at DESC`,
+       ORDER BY pu.purchased_at IS NULL ASC, pu.purchased_at DESC, pu.id DESC`,
       [custId]
     );
     res.json(rows);
