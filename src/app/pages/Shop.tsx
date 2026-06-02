@@ -228,7 +228,7 @@ export default function Shop() {
     { id: 'bottom', label: '하의' },
   ];
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = async (product: Product) => {
     if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) {
       navigate('/auth', { state: { from: '/shop', message: '장바구니는 로그인 후 이용 가능합니다' } });
       return;
@@ -244,11 +244,11 @@ export default function Shop() {
     window.dispatchEvent(new Event('storage'));
     Logger.log('add_to_cart', { productId: product.id, productName: product.name });
 
-    // 백엔드 장바구니 API 호출 (실패해도 localStorage는 이미 저장됨)
+    // 백엔드 장바구니 API 호출 후 purchaseId를 localStorage에 저장
     try {
       const partnerCustomerId = localStorage.getItem('partnerCustomerId');
       const numericProductId = parseInt(String(product.id).replace(/[^0-9]/g, ''), 10) || null;
-      fetch(`${API_BASE}/purchase`, {
+      const res = await fetch(`${API_BASE}/purchase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -260,8 +260,15 @@ export default function Shop() {
           size: product.sizes[0],
         }),
         signal: AbortSignal.timeout(3000),
-        keepalive: true,
-      }).catch(() => {});
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.purchaseId) {
+          const updated = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+          const target = updated.find((c: any) => c.product.id === product.id);
+          if (target) { target.purchaseId = data.purchaseId; localStorage.setItem(cartKey(), JSON.stringify(updated)); }
+        }
+      }
     } catch { /* 무시 */ }
 
     // GA4 이벤트 전송 (추적 스크립트 연동)

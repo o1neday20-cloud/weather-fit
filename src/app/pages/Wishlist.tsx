@@ -104,7 +104,7 @@ export default function Wishlist() {
     Logger.log('product_view', { productId, action: 'wishlist_remove' });
   };
 
-  const handleAddToCart = (item: WishItem) => {
+  const handleAddToCart = async (item: WishItem) => {
     const userId = localStorage.getItem('userId');
     if (!userId || userId.startsWith('anon_')) {
       navigate('/auth', { state: { from: '/wishlist', message: '장바구니는 로그인 후 이용 가능합니다' } });
@@ -123,11 +123,11 @@ export default function Wishlist() {
       localStorage.setItem(cartKey(), JSON.stringify(cart));
     }
 
-    // DB 장바구니에 저장 (관리자 페이지 반영)
+    // DB 장바구니에 저장 후 purchaseId를 localStorage에 기록
     try {
       const partnerCustomerId = localStorage.getItem('partnerCustomerId');
       const numericProductId = parseInt(String(item.product_id).replace(/[^0-9]/g, ''), 10) || null;
-      fetch(`${API_BASE}/purchase`, {
+      const res = await fetch(`${API_BASE}/purchase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -138,8 +138,16 @@ export default function Wishlist() {
           price:             item.price,
           size:              'M',
         }),
-        keepalive: true,
-      }).catch(() => {});
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.purchaseId) {
+          const updated = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+          const target = updated.find((c: any) => c.product.id === item.product_id);
+          if (target) { target.purchaseId = data.purchaseId; localStorage.setItem(cartKey(), JSON.stringify(updated)); }
+        }
+      }
     } catch { /* 무시 */ }
 
     Logger.log('add_to_cart', { productId: item.product_id });

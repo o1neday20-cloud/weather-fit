@@ -852,7 +852,7 @@ app.post('/api/purchase', async (req, res) => {
         );
         if (existing.length > 0) return res.json({ success: true, duplicate: true });
       }
-      await pool.execute(
+      const [insertResult] = await pool.execute(
         `INSERT INTO purchase (customer_id, product_id, price, size, status)
          VALUES (?, ?, ?, ?, ?)`,
         [partnerCustId, partnerProductId, price || 0, size || null, currentStatus]
@@ -864,6 +864,7 @@ app.post('/api/purchase', async (req, res) => {
         price,
         size:        size || null,
       }).catch(() => {});
+      return res.json({ success: true, purchaseId: (insertResult as any).insertId ?? null });
     }
     res.json({ success: true });
   } catch (err) { console.error(err); res.status(500).json({ error: '구매 처리 실패' }); }

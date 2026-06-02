@@ -71,7 +71,22 @@ export default function Cart() {
 
     // DB에서도 삭제
     try {
-      const purchaseId = (item as any).purchaseId;
+      let purchaseId = (item as any).purchaseId;
+
+      // purchaseId가 없으면 DB 장바구니에서 product_id로 조회 (폴백)
+      if (!purchaseId) {
+        const customerId = localStorage.getItem('partnerCustomerId');
+        if (customerId) {
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase/${customerId}/cart`);
+          if (res.ok) {
+            const dbCart = await res.json();
+            const numericId = parseInt(String(item.product.id).replace(/^prod_/i, ''), 10);
+            const match = dbCart.find((r: any) => Number(r.product_id) === numericId);
+            if (match) purchaseId = match.purchase_id ?? match.id;
+          }
+        }
+      }
+
       if (purchaseId) {
         await fetch(`${import.meta.env.VITE_API_URL}/cart/${purchaseId}`, { method: 'DELETE' });
       }

@@ -232,11 +232,40 @@ export default function ProductDetail() {
     return true;
   };
 
-  const addToCart = () => {
+  const addToCart = async () => {
     if (!product || !selectedSize) return;
     if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) { requireLogin(); return; }
 
     addToCartItem();
+
+    // DB 장바구니 저장 및 purchaseId를 localStorage에 기록
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
+      const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+      const numericProductId = parseInt(String(product.id).replace(/[^0-9]/g, ''), 10) || null;
+      const res = await fetch(`${API_BASE_URL}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id:       localStorage.getItem('userId'),
+          partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
+          product_id:        numericProductId,
+          status:            'cart',
+          price:             product.price,
+          size:              selectedSize,
+        }),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.purchaseId) {
+          const cart = JSON.parse(localStorage.getItem(cartKey()) || '[]');
+          const target = cart.find((c: any) => c.product.id === product.id && c.size === selectedSize);
+          if (target) { target.purchaseId = data.purchaseId; localStorage.setItem(cartKey(), JSON.stringify(cart)); }
+        }
+      }
+    } catch { /* 무시 */ }
+
     Logger.log('add_to_cart', {
       productId: product.id,
       productName: product.name,
