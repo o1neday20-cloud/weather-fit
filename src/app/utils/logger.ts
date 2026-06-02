@@ -32,18 +32,20 @@ export interface LogData {
 // tag가 Kafka 토픽 이름이 됩니다 (fluent.conf의 <match> 참조)
 async function sendToFluentd(tag: string, payload: object): Promise<boolean> {
   try {
-    const res = await fetch(`${FLUENTD_URL}/${tag}`, {
+    // mode: 'no-cors' — opaque response로 처리해 ERR_CONNECTION_RESET 등이 콘솔에 표시되지 않음
+    // no-cors 특성상 res.ok를 읽을 수 없으므로 전송 시도 성공 여부만 반환
+    await fetch(`${FLUENTD_URL}/${tag}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' }, // no-cors는 Content-Type을 simple type으로만 허용
       body: JSON.stringify({
         ...payload,
         clientTimestamp: new Date().toISOString(),
         pageUrl: window.location.href,
       }),
-      signal: AbortSignal.timeout(3000),
+      mode: 'no-cors',
       keepalive: true,
     });
-    return res.ok;
+    return true;
   } catch {
     return false;
   }

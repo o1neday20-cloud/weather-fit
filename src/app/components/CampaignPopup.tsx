@@ -25,17 +25,17 @@ export function getAnonymousId(): string {
   return id;
 }
 
-// 비로그인 방문 로그 → Fluentd
+// 비로그인 방문 로그 → /api/logs/behavior (Fluentd 연결 오류 방지)
 function sendAnonymousVisit(pageUrl: string) {
   const anonymousId = getAnonymousId();
-  fetch(`${FLUENTD_URL}/weatherfit.anonymous`, {
+  fetch(`${API_BASE}/logs/behavior`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      anonymous_id: anonymousId,
+      event_type:   'page_view',
+      customer_id:  null,
       page_url:     pageUrl,
-      user_agent:   navigator.userAgent,
-      visited_at:   new Date().toISOString(),
+      anonymous_id: anonymousId,
     }),
     keepalive: true,
   }).catch(() => {});
