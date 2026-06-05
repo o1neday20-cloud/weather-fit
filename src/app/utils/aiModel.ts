@@ -227,13 +227,22 @@ export function recommendOutfit(
   // 날씨 조건
   const needOuter = feelTemp < 15;
   const outerMinW = feelTemp < 5 ? 5 : feelTemp < 10 ? 4 : 3;
-  const topMinW   = needOuter ? 1 : (feelTemp < 10 ? 3 : feelTemp < 20 ? 2 : 1);
-  const topMaxW   = needOuter ? 3 : 5;
-  const botMinW   = feelTemp < 10 ? 2 : 1;
+
+  // 목표 보온성: feelTemp 기반
+  const targetWarmth = feelTemp < 5 ? 5 : feelTemp < 10 ? 4 : feelTemp < 15 ? 3 : feelTemp < 20 ? 2 : 1;
+
+  // 아우터가 있으면 상의·하의는 보온성을 1단계 낮춤 (아우터가 보온을 보완)
+  const innerTarget = needOuter ? Math.max(1, targetWarmth - 1) : targetWarmth;
+
+  // 상의·하의 모두 innerTarget ± 1 범위로 제한 (보온성 균형 유지)
+  const topMinW    = Math.max(1, innerTarget - 1);
+  const topMaxW    = Math.min(5, innerTarget + 1);
+  const botMinW    = Math.max(1, innerTarget - 1);
+  const botMaxW    = Math.min(5, innerTarget + 1);
 
   const outerCands  = needOuter ? pickCandidates('outer',  3, outerMinW) : [];
   const topCands    = pickCandidates('top',    3, topMinW, topMaxW);
-  const bottomCands = pickCandidates('bottom', 3, botMinW);
+  const bottomCands = pickCandidates('bottom', 3, botMinW, botMaxW);
 
   // 후보 조합 중 색상 점수가 가장 높은 코디 선택
   const outerLoop  = needOuter && outerCands.length > 0 ? outerCands : [null];
