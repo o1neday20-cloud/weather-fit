@@ -230,22 +230,6 @@ export const mockProducts: Product[] = [
     colors: [C.KHAKI, C.BLACK, C.BEIGE, C.GRAY],
     inStock: true, isOwned: false, imageUrl: '/images/products/prod_22.jpg',
   },
-  {
-    id: 'prod_23', name: '린넨 와이드팬츠', category: 'bottom', warmth: 1,
-    color: C.BEIGE.hex, style: 'minimal', price: 55000, brand: 'UNIQLO',
-    description: '시원한 린넨 와이드팬츠. 여름에도 시원하고 세련된 실루엣.',
-    sizes: ['S','M','L','XL'],
-    colors: [C.BEIGE, C.WHITE, C.GRAY, C.MINT],
-    inStock: true, isOwned: false, imageUrl: '/images/products/prod_23.jpg',
-  },
-  {
-    id: 'prod_24', name: '미니스커트', category: 'bottom', warmth: 1,
-    color: C.BLACK.hex, style: 'street', price: 39000, brand: 'ZARA',
-    description: '캐주얼 데일리 미니스커트. 어느 상의와도 매칭이 잘 돼요.',
-    sizes: ['XS','S','M','L'],
-    colors: [C.BLACK, C.WHITE, C.DENIM, C.BURGUNDY],
-    inStock: true, isOwned: false, imageUrl: '/images/products/prod_24.jpg',
-  },
   // ── 기존 샘플 옷장에서 쇼핑으로 이동 ─────────────────────
   {
     id: 'prod_25', name: '흰 티셔츠', category: 'top', warmth: 1,
@@ -270,14 +254,6 @@ export const mockProducts: Product[] = [
     sizes: ['S','M','L','XL'],
     colors: [C.BEIGE, C.CHARCOAL, C.BLACK, C.BURGUNDY],
     inStock: true, isOwned: false, imageUrl: '/images/products/prod_1.jpg',
-  },
-  {
-    id: 'prod_28', name: '트레이닝 팬츠', category: 'bottom', warmth: 3,
-    color: C.CHARCOAL.hex, style: 'sporty', price: 39000, brand: 'NIKE',
-    description: '편안한 트레이닝 팬츠. 운동부터 데일리까지 두루 활용 가능.',
-    sizes: ['S','M','L','XL'],
-    colors: [C.CHARCOAL, C.BLACK, C.DARK_NAVY, C.GRAY],
-    inStock: true, isOwned: false, imageUrl: '/images/products/prod_10.jpg',
   },
 ];
 

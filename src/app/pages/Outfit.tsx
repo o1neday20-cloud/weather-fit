@@ -4,7 +4,6 @@ import Navigation from '../components/Navigation';
 import ClothingItem from '../components/ClothingItem';
 import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
-import { mockProducts } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { Sparkles, RefreshCw, ShoppingBag } from 'lucide-react';
@@ -55,10 +54,10 @@ export default function Outfit() {
             setDbProducts(shopProducts);
           }
         } catch {
-          // API 실패 시 mockProducts 폴백
+          // API 실패 시 빈 배열 유지 (mockProducts 폴백 제거)
         }
       }
-      const shopFallback = shopProducts.length > 0 ? shopProducts : (mockProducts as unknown as (ClothingItemType & { imageUrl?: string })[]);
+      const shopFallback = shopProducts;
 
       // 날씨 API: 3초 내 응답 없으면 캐시 또는 기본값으로 폴백
       const cachedWeather = localStorage.getItem('lastWeather');

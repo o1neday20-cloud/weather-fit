@@ -5,10 +5,11 @@ import WeatherCard from '../components/WeatherCard';
 import ClothingItem from '../components/ClothingItem';
 import { getCurrentWeather, WeatherData } from '../utils/weatherApi';
 import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemType, UserPreference } from '../utils/aiModel';
-import { mockProducts } from '../utils/products';
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { Sparkles, TrendingUp, Settings } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
 export default function Home() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -23,6 +24,25 @@ export default function Home() {
 
   const loadData = async () => {
     setLoading(true);
+
+    // DB 상품 목록 조회 (코디 추천용 shopFallback)
+    let shopFallback: (ClothingItemType & { imageUrl?: string })[] = [];
+    try {
+      const res = await fetch(`${API_BASE}/products`);
+      if (res.ok) {
+        const rows = await res.json();
+        shopFallback = rows.map((row: any) => ({
+          id:       row.product_id ?? `prod_${row.id}`,
+          name:     row.name || row.product_name || '',
+          category: (row.category || 'top').toLowerCase() as ClothingItemType['category'],
+          warmth:   Number(row.warmth) || 1,
+          color:    '#9CA3AF',
+          style:    (row.style || 'casual').toLowerCase() as ClothingItemType['style'],
+          isOwned:  false,
+          imageUrl: row.image_url || undefined,
+        }));
+      }
+    } catch { /* API 실패 시 빈 배열 유지 */ }
 
     // 날씨 데이터 가져오기 (위치 기반)
     const weatherData = await getCurrentWeather();
@@ -42,8 +62,8 @@ export default function Home() {
     const wardrobeString = localStorage.getItem(wardrobeKey());
     const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
 
-    // 코디 추천
-    const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, undefined, mockProducts);
+    // 코디 추천 (DB 상품 사용, 없으면 빈 배열 — mockProducts 폴백 제거)
+    const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, undefined, shopFallback);
     setRecommendedOutfit(outfitResult.items);
 
     // 현재 추천 코디 저장 (피드백용)
