@@ -27,6 +27,7 @@ export default function MyPage() {
     next_update: string;
   }>({ amount: 0, amount_to_next: 0, next_level: null, next_update: '' });
   const [couponCount, setCouponCount] = useState<number>(0);
+  const [currentMonthData, setCurrentMonthData] = useState<{ currentMonthAmount: number; nextGrade: string }>({ currentMonthAmount: 0, nextGrade: '일반' });
   const [prefs, setPrefs] = useState({
     cold_sensitivity: 3,
     activity_level: 'medium',
@@ -59,11 +60,11 @@ export default function MyPage() {
       fetch(`${API_BASE}/customers/${userId}`)
         .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
-          // 구매금액 기반으로 등급 계산 (DB 컬럼은 갱신 지연 있으므로 사용하지 않음)
+          // 전월 구매금액 기반 등급 계산
           const amount = data.membership_amount ?? 0;
-          const computedLevel = amount >= 500000 ? 'VIP'
-            : amount >= 300000 ? 'GOLD'
-            : amount >= 100000 ? 'SILVER'
+          const computedLevel = amount >= 1000000 ? 'VIP'
+            : amount >= 500000 ? 'GOLD'
+            : amount >= 200000 ? 'SILVER'
             : 'BASIC';
           setMembershipLevel(computedLevel);
           setMembershipData({
@@ -85,6 +86,14 @@ export default function MyPage() {
           }));
         })
         .catch(() => {});
+      // 이번 달 구매금액 + 다음 달 예상 등급
+      const partnerCid = localStorage.getItem('partnerCustomerId');
+      if (partnerCid) {
+        fetch(`${API_BASE}/membership/current-month?customerId=${partnerCid}`)
+          .then(r => r.ok ? r.json() : Promise.reject())
+          .then(d => setCurrentMonthData({ currentMonthAmount: d.currentMonthAmount ?? 0, nextGrade: d.nextGrade ?? '일반' }))
+          .catch(() => {});
+      }
       // 쿠폰 수 로드
       fetch(`${API_BASE}/coupons/my/${userId}`, { signal: AbortSignal.timeout(3000) })
         .then(r => r.ok ? r.json() : [])
@@ -267,10 +276,15 @@ export default function MyPage() {
                 </span>
                 <span className="text-sm text-gray-600">{BENEFITS[level]}</span>
               </div>
-              {/* DB 기반 누적 구매금액 */}
-              <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+              {/* 지난 달 구매금액 기반 현재 등급 정보 */}
+              <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                 <ShoppingBag className="w-3.5 h-3.5" />
-                이번 기간 누적 {amount.toLocaleString()}원 · 등급 리셋까지 {daysUntilReset}일
+                지난 달 구매금액 {amount.toLocaleString()}원 · 등급 갱신까지 {daysUntilReset}일
+              </div>
+              {/* 이번 달 구매금액 + 다음 달 예상 등급 */}
+              <div className="text-xs text-blue-500 mb-2 flex items-center gap-1">
+                <ShoppingBag className="w-3.5 h-3.5" />
+                이번 달 구매금액 {currentMonthData.currentMonthAmount.toLocaleString()}원 · 다음 달 예상 등급: <span className="font-semibold">{currentMonthData.nextGrade}</span>
               </div>
               {nextLevel && nextThreshold && (
                 <div>

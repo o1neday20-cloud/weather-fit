@@ -398,6 +398,32 @@ app.get('/api/customers/:id', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: '고객 조회 실패' }); }
 });
 
+// 이번 달 구매금액 + 다음 달 예상 등급  GET /api/membership/current-month?customerId={id}
+app.get('/api/membership/current-month', async (req, res) => {
+  const { customerId } = req.query;
+  if (!customerId) return res.status(400).json({ error: 'customerId 필요' });
+  try {
+    const now        = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1); // 이번 달 1일
+    const [[row]] = await pool.execute(
+      `SELECT COALESCE(SUM(price), 0) AS total
+       FROM purchase
+       WHERE customer_id = ? AND status = 'PURCHASED'
+         AND purchased_at >= ?`,
+      [Number(customerId), monthStart]
+    );
+    const currentMonthAmount = Number(row.total);
+    const nextGrade = currentMonthAmount >= 1000000 ? 'VIP'
+                    : currentMonthAmount >= 500000   ? '골드'
+                    : currentMonthAmount >= 200000   ? '실버'
+                    :                                  '일반';
+    res.json({ currentMonthAmount, nextGrade });
+  } catch (err) {
+    console.error('[membership/current-month]', err.message);
+    res.status(500).json({ error: '조회 실패' });
+  }
+});
+
 app.post('/api/customers', async (req, res) => {
   const { customer_id, cold_sensitivity, activity_level, preferred_style, name, email } = req.body;
 
