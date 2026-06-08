@@ -860,13 +860,8 @@ app.post('/api/purchase', async (req, res) => {
          VALUES (?, ?, ?, ?, ?)`,
         [partnerCustId, partnerProductId, price || 0, size || null, currentStatus]
       );
-      sendToKafka({
-        event_type:  'add_to_cart',
-        customer_id: partnerCustId,
-        product_id:  partnerProductId,
-        price,
-        size:        size || null,
-      }).catch(() => {});
+      // add_to_cart Kafka 전송 제거 — Spring Boot Consumer가 event_type 무관하게
+      // PURCHASED로 저장하는 버그를 임시 차단
       return res.json({ success: true, purchaseId: insertResult.insertId ?? null });
     }
     res.json({ success: true });

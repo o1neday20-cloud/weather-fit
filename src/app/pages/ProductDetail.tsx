@@ -299,8 +299,12 @@ export default function ProductDetail() {
   const buyNow = () => {
     if (!product || !selectedSize) return;
     if ((!localStorage.getItem('userId') || localStorage.getItem('userId')!.startsWith('anon_') )) { requireLogin(); return; }
-    addToCartItem();
-    navigate('/checkout');
+    // 장바구니에 추가하지 않고 해당 상품만 navigate state로 전달
+    navigate('/checkout', {
+      state: {
+        checkoutItems: [{ product, size: selectedSize, selectedColor, quantity }],
+      },
+    });
   };
 
   if (isLoading) {
