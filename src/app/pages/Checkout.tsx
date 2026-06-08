@@ -96,30 +96,34 @@ export default function Checkout() {
     e.preventDefault();
     setProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 500));
+
+    // ── 옷장 로컬 업데이트 (실패해도 구매는 반드시 계속됨) ────────
     if (addToWardrobe) {
-      const wardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
-      cartItems.forEach(item => {
-        const baseId = item.product.id;
-        const color = item.selectedColor?.hex || item.product.color;
-        const colorName = item.selectedColor?.name || '';
-        const existing = wardrobe.find((w: any) => w.productId === baseId || w.id === baseId);
-        if (existing) {
-          // 같은 상품, 색상만 추가
-          if (!existing.colorVariants) existing.colorVariants = [];
-          const alreadyHasColor = existing.colorVariants.some((c: any) => c.hex === color);
-          if (!alreadyHasColor) existing.colorVariants.push({ hex: color, name: colorName });
-        } else {
-          wardrobe.push({
-            ...item.product,
-            id: baseId,
-            productId: baseId,
-            isOwned: true,
-            color,
-            colorVariants: [{ hex: color, name: colorName }],
-          });
-        }
-      });
-      localStorage.setItem(wardrobeKey(), JSON.stringify(wardrobe));
+      try {
+        const wardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
+        cartItems.forEach(item => {
+          const baseId = item.product.id;
+          const color = item.selectedColor?.hex || item.product.color;
+          const colorName = item.selectedColor?.name || '';
+          const existing = wardrobe.find((w: any) => w.productId === baseId || w.id === baseId);
+          if (existing) {
+            // 같은 상품 — 새 색상만 추가, 이미 있는 색상은 스킵
+            if (!Array.isArray(existing.colorVariants)) existing.colorVariants = [];
+            const alreadyHasColor = existing.colorVariants.some((c: any) => c.hex === color);
+            if (!alreadyHasColor) existing.colorVariants.push({ hex: color, name: colorName });
+          } else {
+            wardrobe.push({
+              ...item.product,
+              id: baseId,
+              productId: baseId,
+              isOwned: true,
+              color,
+              colorVariants: [{ hex: color, name: colorName }],
+            });
+          }
+        });
+        localStorage.setItem(wardrobeKey(), JSON.stringify(wardrobe));
+      } catch { /* 옷장 추가 실패해도 구매 처리는 계속 */ }
     }
     // ── 1. DB 저장 (필수) — 아이템별 POST /api/purchase ──────────
     const partnerCustIdNum = Number(localStorage.getItem('partnerCustomerId')) || null;
@@ -164,34 +168,43 @@ export default function Checkout() {
       couponInfo?.coupon_id, couponInfo?.discountAmt,
     ).catch(() => {});
 
-    // ── WARDROBE 이벤트 전송 (구매 상품 → 옷장 API) ───────────────
-    const userId = localStorage.getItem('userId');
-    const partnerCustomerId = localStorage.getItem('partnerCustomerId');
-    const partnerColors: any[] = JSON.parse(localStorage.getItem('partnerColors') || '[]');
-    for (const item of cartItems) {
-      const colorHex = item.selectedColor?.hex || item.product.color;
-      const matchedProductColor = Object.values(PRODUCT_COLORS).find(c => c.hex === colorHex);
-      const koLabel = matchedProductColor?.name || '';
-      const enName = COLOR_NAME_MAP[koLabel] || koLabel.toUpperCase();
-      const partnerColor = partnerColors.find((c: any) => (c.name || '').toUpperCase() === enName);
-      const colorId = partnerColor?.id ?? null;
-      const wardrobeId = `wd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      fetch(`${API_BASE}/wardrobe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wardrobe_id: wardrobeId,
-          customer_id: userId,
-          category: (item.product.category || 'top').toUpperCase(),
-          style: (item.product.style || 'casual').toUpperCase(),
-          warmth: item.product.warmth,
-          color: colorHex,
-          color_id: colorId,
-          partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
-        }),
-        signal: AbortSignal.timeout(3000),
-        keepalive: true,
-      }).catch(() => {});
+    // ── WARDROBE API (이미 같은 색상이 있으면 스킵 — 구매와 무관) ──
+    if (addToWardrobe) {
+      const userId = localStorage.getItem('userId');
+      const partnerCustomerId = localStorage.getItem('partnerCustomerId');
+      const partnerColors: any[] = JSON.parse(localStorage.getItem('partnerColors') || '[]');
+      const currentWardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
+      for (const item of cartItems) {
+        const colorHex = item.selectedColor?.hex || item.product.color;
+        // 옷장에 동일 상품 + 동일 색상이 이미 있으면 API 스킵
+        const existingItem = currentWardrobe.find((w: any) => w.productId === item.product.id || w.id === item.product.id);
+        const alreadyHasColor = Array.isArray(existingItem?.colorVariants)
+          && existingItem.colorVariants.some((c: any) => c.hex === colorHex);
+        if (alreadyHasColor) continue;
+
+        const matchedProductColor = Object.values(PRODUCT_COLORS).find(c => c.hex === colorHex);
+        const koLabel = matchedProductColor?.name || '';
+        const enName = COLOR_NAME_MAP[koLabel] || koLabel.toUpperCase();
+        const partnerColor = partnerColors.find((c: any) => (c.name || '').toUpperCase() === enName);
+        const colorId = partnerColor?.id ?? null;
+        const wardrobeId = `wd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        fetch(`${API_BASE}/wardrobe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wardrobe_id: wardrobeId,
+            customer_id: userId,
+            category: (item.product.category || 'top').toUpperCase(),
+            style: (item.product.style || 'casual').toUpperCase(),
+            warmth: item.product.warmth,
+            color: colorHex,
+            color_id: colorId,
+            partnerCustomerId: partnerCustomerId ? Number(partnerCustomerId) : null,
+          }),
+          signal: AbortSignal.timeout(3000),
+          keepalive: true,
+        }).catch(() => {});
+      }
     }
 
     // ── 구매 내역 localStorage 저장 (MyPage 표시용) ───────────────
