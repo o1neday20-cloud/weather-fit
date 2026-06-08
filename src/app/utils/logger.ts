@@ -260,12 +260,10 @@ export class Logger {
       anonymous_id: isAnon ? (localStorage.getItem('anonymous_id') ?? null) : null,
     };
 
-    // Fluentd → Kafka weatherfit.feedback
+    await sendToApi('/feedback', payload); // 항상 DB에 직접 저장
     if (USE_FLUENTD) {
-      const ok = await sendToFluentd('weatherfit.feedback', payload);
-      if (ok) return;
+      sendToFluentd('weatherfit.feedback', payload); // fire-and-forget
     }
-    await sendToApi('/feedback', payload);
   }
 
   // ── 찜 이벤트 전송 ─────────────────────────────────────────
