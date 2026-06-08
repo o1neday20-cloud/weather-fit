@@ -304,6 +304,14 @@ export class Logger {
     await sendToApi('/wardrobe', payload);
   }
 
+  // ── 고객 정보 변경 이벤트 전송 ────────────────────────────────
+  static async sendCustomerUpdate(payload: object) {
+    await sendToApi('/logs/customer', payload);
+    if (USE_FLUENTD) {
+      sendToFluentd('weatherfit.customer', payload); // fire-and-forget
+    }
+  }
+
   // ── customer 자동 등록 ─────────────────────────────────────
   static async ensureCustomer() {
     // partnerCustomerId(bigint)가 있으면 이미 DB에 존재하는 고객 → 호출 불필요

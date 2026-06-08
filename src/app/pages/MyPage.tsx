@@ -136,6 +136,21 @@ export default function MyPage() {
         localStorage.setItem('userProfile', JSON.stringify(updated));
       }
       setEditMode(false);
+
+      // 동의/선호 정보 변경 로그 전송
+      Logger.sendCustomerUpdate({
+        event_type:  'customer_update',
+        customer_id: Number(localStorage.getItem('partnerCustomerId')),
+        changed_fields: {
+          coldSensitivity:  prefs.cold_sensitivity,
+          activityLevel:    prefs.activity_level,
+          preferredStyle:   prefs.preferred_style,
+          marketingConsent: prefs.marketing_consent,
+          pushConsent:      prefs.push_consent,
+          emailConsent:     prefs.email_consent,
+          smsConsent:       prefs.sms_consent,
+        },
+      }).catch(() => {});
     } catch {
       alert('저장에 실패했습니다');
     } finally {

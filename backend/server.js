@@ -1039,6 +1039,32 @@ app.post('/api/logs/behavior', async (req, res) => {
   }
 });
 
+// 고객 정보 변경 로그  POST /api/logs/customer
+// behavior_log에 event_type='customer_update' 로 저장 + Kafka 전송
+app.post('/api/logs/customer', async (req, res) => {
+  const { customer_id, event_type, changed_fields } = req.body;
+  try {
+    const custId = customer_id ? Number(customer_id) : null;
+    // Kafka 전송 — fire-and-forget (changed_fields 포함)
+    sendToKafka({
+      event_type:     event_type || 'customer_update',
+      customer_id:    custId,
+      changed_fields: changed_fields || {},
+    }).catch(() => {});
+    // behavior_log DB 저장
+    await pool.execute(
+      `INSERT INTO behavior_log
+         (customer_id, event_type, page_url, timestamp, created_at)
+       VALUES (?, ?, ?, NOW(), NOW())`,
+      [custId, (event_type || 'customer_update').toLowerCase(), '/mypage']
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[logs/customer]', err.message);
+    res.status(500).json({ error: '로그 저장 실패' });
+  }
+});
+
 app.post('/api/logs/success', async (req, res) => {
   try {
     // DDL: raw_message NOT NULL, processed_at NOT NULL, created_at NOT NULL
