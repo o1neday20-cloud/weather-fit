@@ -72,8 +72,8 @@ export default function CampaignPopup() {
         .then(r => r.json())
         .then(data => {
           if (!data?.id || !data?.popupMessage) return;
-          // 오늘 이미 "오늘 그만보기"를 눌렀으면 스킵
-          const dismissKey = `campaign_dismiss_${data.id}`;
+          // 오늘 이미 "오늘 그만보기"를 눌렀으면 스킵 (계정별 구분)
+          const dismissKey = `campaign_dismiss_${data.id}_${customerId}`;
           if (localStorage.getItem(dismissKey) === today()) return;
           setPopup({ show: true, message: data.popupMessage, campaignId: String(data.id) });
         })
@@ -114,7 +114,8 @@ export default function CampaignPopup() {
   // "오늘 그만보기" — 오늘 날짜를 localStorage에 저장해 당일 재노출 차단
   const handleDismissToday = () => {
     if (popup.campaignId) {
-      localStorage.setItem(`campaign_dismiss_${popup.campaignId}`, today());
+      const customerId = localStorage.getItem('partnerCustomerId') || 'guest';
+      localStorage.setItem(`campaign_dismiss_${popup.campaignId}_${customerId}`, today());
     }
     setPopup({ show: false, message: '', campaignId: null });
   };
