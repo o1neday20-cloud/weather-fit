@@ -518,6 +518,36 @@ app.get('/api/campaign-popup', async (req, res) => {
   }
 });
 
+// ── 사용자 팝업 조회 (/api/campaigns는 nginx→8080이라 별도 경로 사용) ──
+// Spring Boot /api/campaigns/popup 또는 /api/admin/campaigns 에서 활성 캠페인 조회
+app.get('/api/user-popup', async (req, res) => {
+  const { customerId } = req.query;
+  try {
+    // 1차: Spring Boot 캠페인 팝업 전용 엔드포인트 시도
+    const r = await axios.get(
+      `http://210.104.76.135:8080/api/campaigns/popup?customerId=${customerId || ''}`,
+      { timeout: 3000 }
+    );
+    const d = r.data;
+    const id           = d?.id           != null ? String(d.id)           : null;
+    const popupMessage = d?.popupMessage || d?.message                    || null;
+    if (id && popupMessage) return res.json({ id, popupMessage });
+    return res.json({});
+  } catch {
+    // 2차 폴백: 관리자 캠페인 목록에서 팝업 메시지 있는 활성 캠페인 조회
+    try {
+      const r2 = await axios.get(
+        'http://210.104.76.135:8080/api/admin/campaigns',
+        { timeout: 3000 }
+      );
+      const list = Array.isArray(r2.data) ? r2.data : (r2.data?.content || []);
+      const active = list.find((c) => c.status === 'ACTIVE' && c.popupMessage);
+      if (active) return res.json({ id: String(active.id), popupMessage: active.popupMessage });
+    } catch {}
+    res.json({});
+  }
+});
+
 // ── 쿠폰 발급 프록시 (팀원 캠페인 API → localhost:8080) ─────────
 app.post('/api/coupons/issue-campaign', async (req, res) => {
   const { campaign_id, customer_id } = req.body;

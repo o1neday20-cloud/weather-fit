@@ -66,29 +66,18 @@ export default function CampaignPopup() {
       const customerId = localStorage.getItem('partnerCustomerId');
       if (!customerId) return;
 
-      // 신규 캠페인 팝업: /api/campaign-popup (Node.js 경로, 오늘 날짜 기반 dismiss 지원)
-      fetch(`${API_BASE}/campaign-popup?customerId=${customerId}`)
+      // 캠페인 팝업: /api/user-popup (Node.js 경로 — nginx /api/campaigns 충돌 회피)
+      // 응답: { id, popupMessage } 또는 {} (팝업 없을 때)
+      fetch(`${API_BASE}/user-popup?customerId=${customerId}`)
         .then(r => r.json())
         .then(data => {
-          if (!data?.show || !data?.id) return;
-          // 오늘 이미 "오늘 그만보기" 를 눌렀으면 스킵
+          if (!data?.id || !data?.popupMessage) return;
+          // 오늘 이미 "오늘 그만보기"를 눌렀으면 스킵
           const dismissKey = `campaign_dismiss_${data.id}`;
           if (localStorage.getItem(dismissKey) === today()) return;
-          setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!', campaignId: data.id });
+          setPopup({ show: true, message: data.popupMessage, campaignId: String(data.id) });
         })
-        .catch(() => {
-          // 신규 API 실패 시 기존 popup-check 폴백
-          fetch(`${API_BASE}/campaigns/popup-check/customer?customerId=${customerId}`)
-            .then(r => r.json())
-            .then(data => {
-              if (!data?.showPopup) return;
-              const cid = data.campaignId ? String(data.campaignId) : null;
-              const sessionKey = cid ? `popup_closed_campaign_${cid}` : 'popup_closed_campaign_unknown';
-              if (sessionStorage.getItem(sessionKey)) return;
-              setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!', campaignId: cid });
-            })
-            .catch(() => {});
-        });
+        .catch(() => {});
     } else {
       // 비로그인 사용자: 방문 로그 전송
       sendAnonymousVisit(pageUrl);
