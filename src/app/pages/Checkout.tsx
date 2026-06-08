@@ -97,11 +97,26 @@ export default function Checkout() {
     setProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 500));
 
+    // ── state 대신 직접 읽어 타이밍 이슈 방지 ────────────────────
+    // setCartItems는 비동기 state 업데이트이므로 handleSubmit 시점에 cartItems가
+    // 빈 배열일 수 있음 → location.state 또는 localStorage에서 직접 획득
+    const stateItemsForSubmit: CartItem[] | undefined = (location.state as any)?.checkoutItems;
+    const submitItems: CartItem[] = stateItemsForSubmit && stateItemsForSubmit.length > 0
+      ? stateItemsForSubmit
+      : JSON.parse(localStorage.getItem(cartKey()) || '[]');
+
+    console.log('[Checkout] 결제 아이템:', submitItems.length, submitItems.map(i => i.product?.id));
+
+    if (submitItems.length === 0) {
+      setProcessing(false);
+      return;
+    }
+
     // ── 옷장 로컬 업데이트 (실패해도 구매는 반드시 계속됨) ────────
     if (addToWardrobe) {
       try {
         const wardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
-        cartItems.forEach(item => {
+        submitItems.forEach(item => {
           const baseId = item.product.id;
           const color = item.selectedColor?.hex || item.product.color;
           const colorName = item.selectedColor?.name || '';
@@ -128,7 +143,7 @@ export default function Checkout() {
     // ── 1. DB 저장 (필수) — 아이템별 POST /api/purchase ──────────
     const partnerCustIdNum = Number(localStorage.getItem('partnerCustomerId')) || null;
     let couponSent = false; // 쿠폰은 첫 번째 아이템에만 포함 (중복 방지)
-    for (const item of cartItems) {
+    for (const item of submitItems) {
       const numericProductId = Number(String(item.product.id).replace(/^prod_/i, ''));
       try {
         const body: Record<string, any> = {
@@ -153,7 +168,7 @@ export default function Checkout() {
 
     // ── 2. 행동 로그 (별도, fire-and-forget) ──────────────────────
     Logger.log('purchase_completed', {
-      items: cartItems.map(item => ({
+      items: submitItems.map(item => ({
         productId: item.product.id, productName: item.product.name,
         quantity: item.quantity, price: item.product.price,
       })),
@@ -161,7 +176,7 @@ export default function Checkout() {
       discountAmt: couponInfo?.discountAmt || 0, finalPrice: getFinalPrice(), addToWardrobe,
     });
     (Logger as any).logPurchase(
-      cartItems.map(item => ({
+      submitItems.map(item => ({
         productId: item.product.id, productName: item.product.name,
         size: item.size, quantity: item.quantity, price: item.product.price,
       })),
@@ -169,15 +184,16 @@ export default function Checkout() {
     ).catch(() => {});
 
     // ── WARDROBE API (이미 같은 색상이 있으면 스킵 — 구매와 무관) ──
+    // 로컬 업데이트 완료 후 localStorage를 다시 읽어 최신 상태로 중복 체크
     if (addToWardrobe) {
       const userId = localStorage.getItem('userId');
       const partnerCustomerId = localStorage.getItem('partnerCustomerId');
       const partnerColors: any[] = JSON.parse(localStorage.getItem('partnerColors') || '[]');
-      const currentWardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
-      for (const item of cartItems) {
+      const latestWardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
+      for (const item of submitItems) {
         const colorHex = item.selectedColor?.hex || item.product.color;
-        // 옷장에 동일 상품 + 동일 색상이 이미 있으면 API 스킵
-        const existingItem = currentWardrobe.find((w: any) => w.productId === item.product.id || w.id === item.product.id);
+        // 로컬 업데이트 이후 옷장 상태 기준으로 동일 상품 + 동일 색상 체크
+        const existingItem = latestWardrobe.find((w: any) => w.productId === item.product.id || w.id === item.product.id);
         const alreadyHasColor = Array.isArray(existingItem?.colorVariants)
           && existingItem.colorVariants.some((c: any) => c.hex === colorHex);
         if (alreadyHasColor) continue;
@@ -209,7 +225,7 @@ export default function Checkout() {
 
     // ── 구매 내역 localStorage 저장 (MyPage 표시용) ───────────────
     const purchaseHistory: any[] = JSON.parse(localStorage.getItem('purchaseHistory') || '[]');
-    cartItems.forEach(item => {
+    submitItems.forEach(item => {
       purchaseHistory.push({
         productId: item.product.id,
         productName: item.product.name,
@@ -225,7 +241,7 @@ export default function Checkout() {
     localStorage.setItem('purchaseHistory', JSON.stringify(purchaseHistory));
 
     // 구매한 아이템만 장바구니에서 제거 (선택 구매 지원)
-    const purchasedKeys = new Set(cartItems.map(item => `${item.product.id}__${item.size}`));
+    const purchasedKeys = new Set(submitItems.map(item => `${item.product.id}__${item.size}`));
     const fullCart: CartItem[] = JSON.parse(localStorage.getItem(cartKey()) || '[]');
     const remainingCart = fullCart.filter(
       item => !purchasedKeys.has(`${item.product.id}__${item.size}`)
