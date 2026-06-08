@@ -125,8 +125,13 @@ export default function CampaignPopup() {
   };
 
   const handleSignup = () => {
+    // 팝업 통해 회원가입 클릭 시 노출 기록
+    const anonymousId = localStorage.getItem('anonymous_id');
+    if (anonymousId) {
+      fetch(`${API_BASE}/anonymous-users/${anonymousId}/popup-shown`, { method: 'PATCH' }).catch(() => {});
+    }
     setPopup({ show: false, message: '', campaignId: null });
-    navigate('/auth', { state: { mode: 'register' } });
+    navigate('/auth?tab=register');
   };
 
   if (!popup.show) return null;

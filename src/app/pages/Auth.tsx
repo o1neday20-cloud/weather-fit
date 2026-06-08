@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router';
+import { useNavigate, useLocation, useSearchParams } from 'react-router';
 import { Logger } from '../utils/logger';
 import { searchLocations } from '../utils/weatherApi';
 import { getAnonymousId } from '../components/CampaignPopup';
@@ -202,9 +202,13 @@ function RegionAutocomplete({ value, onChange }: { value: string; onChange: (nam
 export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const redirectTo = (location.state as any)?.from || '/';
   const redirectMessage = (location.state as any)?.message || '';
-  const [mode, setMode]       = useState<'login' | 'register'>('login');
+  // URL 파라미터 tab=register 이면 회원가입 탭 기본 선택
+  const [mode, setMode] = useState<'login' | 'register'>(
+    searchParams.get('tab') === 'register' ? 'register' : 'login'
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
@@ -315,8 +319,15 @@ export default function Auth() {
       if (data.customer.id != null) {
         localStorage.setItem('partnerCustomerId', String(data.customer.id));
       }
-      // 팝업 통해 가입한 경우 비로그인 → 회원 전환 기록
+      // 비로그인 → 회원 전환 기록 (converted + link)
       fetch(`${API_BASE}/anonymous-users/${anonymousId}/converted`, { method: 'PATCH' }).catch(() => {});
+      if (data.customer.id != null) {
+        fetch(`${API_BASE}/anonymous-users/${anonymousId}/link`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerId: data.customer.id }),
+        }).catch(() => {});
+      }
       mergeGuestWishlist(data.customer.customer_id);
       mergeGuestWardrobe(data.customer.customer_id);
       callPartnerSignup(regForm); // 팀원 서버 연동 (fire-and-forget)
