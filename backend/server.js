@@ -359,24 +359,25 @@ app.get('/api/customers/:id', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: '고객 없음' });
     const customer = rows[0];
 
-    // ── 멤버십 등급 계산 (최근 4개월 구매금액 기준, 이번 달 포함) ──
-    const now = new Date();
-    const startMonth = new Date(now.getFullYear(), now.getMonth() - 4, 1);
+    // ── 멤버십 등급 계산 (전월 구매금액 기준 — 매월 1일 갱신) ──
+    const now        = new Date();
+    const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1); // 전월 1일
+    const prevEnd    = new Date(now.getFullYear(), now.getMonth(),     1); // 이번달 1일 (미만)
 
     const [[amountRow]] = await pool.execute(
       `SELECT COALESCE(SUM(price), 0) AS total
        FROM purchase
        WHERE customer_id = ? AND status = 'PURCHASED'
-         AND purchased_at >= ?`,
-      [customer.id, startMonth]
+         AND purchased_at >= ? AND purchased_at < ?`,
+      [customer.id, prevStart, prevEnd]
     );
     const amount = Number(amountRow.total);
 
     const LEVELS = [
-      { name: 'BASIC',  min: 0 },
-      { name: 'SILVER', min: 100000 },
-      { name: 'GOLD',   min: 300000 },
-      { name: 'VIP',    min: 500000 },
+      { name: 'BASIC',  min: 0       },
+      { name: 'SILVER', min: 200000  },
+      { name: 'GOLD',   min: 500000  },
+      { name: 'VIP',    min: 1000000 },
     ];
     let currentLevel = LEVELS[0];
     for (const l of LEVELS) {
@@ -1117,6 +1118,48 @@ app.get('/api/regions', async (req, res) => {
 });
 
 app.listen(4000, () => console.log('✅ WeatherFit API v5 실행 중: http://localhost:4000'));
+
+// ── 매월 1일 00:00 멤버십 등급 일괄 갱신 스케줄러 ──────────────────
+// node-cron 없이 setInterval로 구현 (1분마다 체크, 매월 1일 00:00에만 실행)
+let lastMembershipUpdate = '';
+setInterval(async () => {
+  const now   = new Date();
+  // 매월 1일 00:00 (분 단위 허용)
+  if (now.getDate() !== 1 || now.getHours() !== 0) return;
+  const key = `${now.getFullYear()}-${now.getMonth() + 1}`; // 중복 실행 방지 키
+  if (lastMembershipUpdate === key) return;
+  lastMembershipUpdate = key;
+
+  console.log(`[멤버십 갱신] ${key} 월 등급 일괄 갱신 시작`);
+  try {
+    // 전월 구매금액 기준으로 모든 고객 등급 재계산
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevEnd   = new Date(now.getFullYear(), now.getMonth(),     1);
+
+    const [customers] = await pool.execute('SELECT id FROM customer');
+    for (const c of customers) {
+      const [[row]] = await pool.execute(
+        `SELECT COALESCE(SUM(price), 0) AS total
+         FROM purchase
+         WHERE customer_id = ? AND status = 'PURCHASED'
+           AND purchased_at >= ? AND purchased_at < ?`,
+        [c.id, prevStart, prevEnd]
+      );
+      const amt = Number(row.total);
+      const level = amt >= 1000000 ? 'VIP'
+                  : amt >= 500000  ? 'GOLD'
+                  : amt >= 200000  ? 'SILVER'
+                  :                  'BASIC';
+      await pool.execute(
+        'UPDATE customer SET membership_level = ? WHERE id = ?',
+        [level, c.id]
+      );
+    }
+    console.log(`[멤버십 갱신] 완료 (총 ${customers.length}명)`);
+  } catch (err) {
+    console.error('[멤버십 갱신] 오류:', err.message);
+  }
+}, 60 * 1000); // 1분마다 체크
 
 // ================================================================
 // ADMIN API

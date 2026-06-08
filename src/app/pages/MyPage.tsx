@@ -7,10 +7,10 @@ import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag, Pa
 const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
 const MEMBERSHIP_INFO: Record<string, { label: string; color: string; nextAt: number | null; benefit: string }> = {
-  BASIC:  { label: 'BASIC',  color: '#9CA3AF', nextAt: 100000,  benefit: '기본 서비스 이용' },
-  SILVER: { label: 'SILVER', color: '#94A3B8', nextAt: 300000,  benefit: '5% 추가 할인' },
-  GOLD:   { label: 'GOLD',   color: '#F59E0B', nextAt: 500000,  benefit: '10% 추가 할인 + 무료배송' },
-  VIP:    { label: 'VIP',    color: '#8B5CF6', nextAt: null,     benefit: '20% 추가 할인 + VIP 전용 혜택' },
+  BASIC:  { label: 'BASIC',  color: '#9CA3AF', nextAt: 200000,  benefit: '일반 등급 할인 쿠폰 증정' },
+  SILVER: { label: 'SILVER', color: '#94A3B8', nextAt: 500000,  benefit: '실버 등급 할인 쿠폰 증정' },
+  GOLD:   { label: 'GOLD',   color: '#F59E0B', nextAt: 1000000, benefit: '골드 등급 할인 쿠폰 증정' },
+  VIP:    { label: 'VIP',    color: '#8B5CF6', nextAt: null,     benefit: 'VIP 등급 할인 쿠폰 증정' },
 };
 
 export default function MyPage() {
@@ -235,13 +235,13 @@ export default function MyPage() {
         {/* 멤버십 등급 — 로그인된 경우만 */}
         {isLoggedIn && profile && (() => {
           const COLORS: Record<string, string> = { BASIC:'#9CA3AF', SILVER:'#94A3B8', GOLD:'#F59E0B', VIP:'#8B5CF6' };
-          const BENEFITS: Record<string, string> = { BASIC:'기본 서비스 이용', SILVER:'5% 추가 할인', GOLD:'10% 추가 할인 + 무료배송', VIP:'20% 추가 할인 + VIP 전용 혜택' };
+          const BENEFITS: Record<string, string> = { BASIC:'일반 등급 할인 쿠폰 증정', SILVER:'실버 등급 할인 쿠폰 증정', GOLD:'골드 등급 할인 쿠폰 증정', VIP:'VIP 등급 할인 쿠폰 증정' };
           // DB 기반 멤버십 데이터
           const level         = membershipLevel;
           const amount        = membershipData.amount;
           const amountToNext  = membershipData.amount_to_next;
           const LEVELS = ['BASIC', 'SILVER', 'GOLD', 'VIP'];
-          const THRESH: Record<string, number> = { BASIC: 0, SILVER: 100000, GOLD: 300000, VIP: 500000 };
+          const THRESH: Record<string, number> = { BASIC: 0, SILVER: 200000, GOLD: 500000, VIP: 1000000 };
           const currentIdx    = LEVELS.indexOf(level);
           const nextLevel     = currentIdx < LEVELS.length - 1 ? LEVELS[currentIdx + 1] : null;
           const nextThreshold = nextLevel ? THRESH[nextLevel] : null;
