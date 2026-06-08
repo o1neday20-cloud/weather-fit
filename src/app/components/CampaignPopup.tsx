@@ -84,16 +84,20 @@ export default function CampaignPopup() {
 
       if (localStorage.getItem('popup_closed') === 'true') return;
 
-      const anonymousId = getAnonymousId();
-      fetch(`${API_BASE}/campaigns/popup-check?anonymousId=${anonymousId}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data?.showPopup) {
-            setPopup({ show: true, message: data.message || '회원가입하고 특별 혜택을 받아보세요!', campaignId: null });
-            fetch(`${API_BASE}/anonymous-users/${anonymousId}/popup-shown`, { method: 'PATCH' }).catch(() => {});
-          }
-        })
-        .catch(() => {});
+      // 비로그인 팝업 체크는 세션당 1회만 호출
+      if (!sessionStorage.getItem('popupChecked')) {
+        const anonymousId = getAnonymousId();
+        sessionStorage.setItem('popupChecked', 'true');
+        fetch(`${API_BASE}/campaigns/popup-check?anonymousId=${anonymousId}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data?.showPopup) {
+              setPopup({ show: true, message: data.message || '회원가입하고 특별 혜택을 받아보세요!', campaignId: null });
+              fetch(`${API_BASE}/anonymous-users/${anonymousId}/popup-shown`, { method: 'PATCH' }).catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
     }
   // pathname 변경(페이지 이동)마다 체크
   // eslint-disable-next-line react-hooks/exhaustive-deps
