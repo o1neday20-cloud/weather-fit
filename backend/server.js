@@ -438,20 +438,23 @@ app.post('/api/customers', async (req, res) => {
 
 // 고객 정보 수정  PATCH /api/customers/:id
 app.patch('/api/customers/:id', async (req, res) => {
+  const CONSENT_FIELDS = ['marketing_consent', 'push_consent', 'email_consent', 'sms_consent'];
   const allowed = ['name', 'phone', 'birth_date', 'gender',
-                   'cold_sensitivity', 'activity_level', 'preferred_style', 'membership_level'];
+                   'cold_sensitivity', 'activity_level', 'preferred_style', 'membership_level',
+                   ...CONSENT_FIELDS];
   const fields = Object.keys(req.body).filter(k => allowed.includes(k));
   if (!fields.length) return res.status(400).json({ error: '변경할 필드 없음' });
   try {
-    // 값 정규화: gender M/F→MALE/FEMALE, 열거형 대문자, cold_sensitivity parseInt
+    // 값 정규화: gender M/F→MALE/FEMALE, 열거형 대문자, cold_sensitivity parseInt, consent boolean→1/0
     const gMap = { M: 'MALE', F: 'FEMALE', MALE: 'MALE', FEMALE: 'FEMALE' };
     const values = fields.map(f => {
       const v = req.body[f];
-      if (f === 'gender')          return gMap[String(v).toUpperCase()] || 'MALE';
-      if (f === 'activity_level')  return (v || 'MEDIUM').toUpperCase();
-      if (f === 'preferred_style') return (v || 'CASUAL').toUpperCase();
-      if (f === 'membership_level')return (v || 'BASIC').toUpperCase();
-      if (f === 'cold_sensitivity')return parseInt(v) || 0;
+      if (f === 'gender')              return gMap[String(v).toUpperCase()] || 'MALE';
+      if (f === 'activity_level')      return (v || 'MEDIUM').toUpperCase();
+      if (f === 'preferred_style')     return (v || 'CASUAL').toUpperCase();
+      if (f === 'membership_level')    return (v || 'BASIC').toUpperCase();
+      if (f === 'cold_sensitivity')    return parseInt(v) || 0;
+      if (CONSENT_FIELDS.includes(f)) return v ? 1 : 0;
       return v;
     });
     const setClause = fields.map(f => `${f} = ?`).join(', ');

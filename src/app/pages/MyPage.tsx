@@ -104,14 +104,37 @@ export default function MyPage() {
     if (!userId) return;
     setSaving(true);
     try {
-      await fetch(`${API_BASE}/customers/${userId}`, {
+      const patchRes = await fetch(`${API_BASE}/customers/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prefs),
       });
-      const updated = { ...profile, ...prefs };
-      setProfile(updated);
-      localStorage.setItem('userProfile', JSON.stringify(updated));
+      if (!patchRes.ok) throw new Error('저장 실패');
+
+      // 저장 후 서버에서 최신 값 재조회해 상태 동기화
+      const freshRes = await fetch(`${API_BASE}/customers/${userId}`);
+      if (freshRes.ok) {
+        const data = await freshRes.json();
+        const synced = {
+          ...prefs,
+          cold_sensitivity:  data.cold_sensitivity  ?? prefs.cold_sensitivity,
+          activity_level:    data.activity_level    ?? prefs.activity_level,
+          preferred_style:   data.preferred_style   ?? prefs.preferred_style,
+          marketing_consent: data.marketing_consent != null ? !!data.marketing_consent : prefs.marketing_consent,
+          push_consent:      data.push_consent      != null ? !!data.push_consent      : prefs.push_consent,
+          email_consent:     data.email_consent     != null ? !!data.email_consent     : prefs.email_consent,
+          sms_consent:       data.sms_consent       != null ? !!data.sms_consent       : prefs.sms_consent,
+        };
+        setPrefs(synced);
+        const updated = { ...profile, ...synced };
+        setProfile(updated);
+        localStorage.setItem('userProfile', JSON.stringify(updated));
+      } else {
+        // 재조회 실패 시 프론트 상태 그대로 반영
+        const updated = { ...profile, ...prefs };
+        setProfile(updated);
+        localStorage.setItem('userProfile', JSON.stringify(updated));
+      }
       setEditMode(false);
     } catch {
       alert('저장에 실패했습니다');
