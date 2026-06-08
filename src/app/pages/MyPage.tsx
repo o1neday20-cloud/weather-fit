@@ -246,22 +246,30 @@ export default function MyPage() {
           const COLORS: Record<string, string> = { BASIC:'#9CA3AF', SILVER:'#94A3B8', GOLD:'#F59E0B', VIP:'#8B5CF6' };
           const BENEFITS: Record<string, string> = { BASIC:'일반 등급 할인 쿠폰 증정', SILVER:'실버 등급 할인 쿠폰 증정', GOLD:'골드 등급 할인 쿠폰 증정', VIP:'VIP 등급 할인 쿠폰 증정' };
           // DB 기반 멤버십 데이터
-          const level         = membershipLevel;
-          const amount        = membershipData.amount;
-          const amountToNext  = membershipData.amount_to_next;
+          const level  = membershipLevel;
+          const amount = membershipData.amount;
           const LEVELS = ['BASIC', 'SILVER', 'GOLD', 'VIP'];
           const THRESH: Record<string, number> = { BASIC: 0, SILVER: 200000, GOLD: 500000, VIP: 1000000 };
-          const currentIdx    = LEVELS.indexOf(level);
-          const nextLevel     = currentIdx < LEVELS.length - 1 ? LEVELS[currentIdx + 1] : null;
-          const nextThreshold = nextLevel ? THRESH[nextLevel] : null;
           // 등급 리셋까지 남은 일수 (next_update 기준)
           const daysUntilReset = membershipData.next_update
             ? Math.max(0, Math.round((new Date(membershipData.next_update).getTime() - Date.now()) / 86400000))
             : 0;
-          // 프로그레스바 (0~100, 음수 방지)
+
+          // ── 이번 달 구매금액 기준 프로그레스 바 ─────────────
+          const currentMonthAmt = currentMonthData.currentMonthAmount;
+          // 이번 달 금액으로 현재 위치 등급 계산
+          const thisMonthLevel = currentMonthAmt >= 1000000 ? 'VIP'
+            : currentMonthAmt >= 500000 ? 'GOLD'
+            : currentMonthAmt >= 200000 ? 'SILVER'
+            : 'BASIC';
+          const thisMonthIdx   = LEVELS.indexOf(thisMonthLevel);
+          const nextLevel      = thisMonthIdx < LEVELS.length - 1 ? LEVELS[thisMonthIdx + 1] : null;
+          const nextThreshold  = nextLevel ? THRESH[nextLevel] : null;
+          const monthAmountToNext = nextThreshold ? Math.max(0, nextThreshold - currentMonthAmt) : 0;
+          // 프로그레스바 (0~100, 이번 달 기준)
           const progressPct = nextThreshold
             ? Math.max(0, Math.min(100, Math.round(
-                ((amount - THRESH[level]) / (nextThreshold - THRESH[level])) * 100
+                ((currentMonthAmt - THRESH[thisMonthLevel]) / (nextThreshold - THRESH[thisMonthLevel])) * 100
               )))
             : 100;
           return (
@@ -282,15 +290,16 @@ export default function MyPage() {
                 지난 달 구매금액 {amount.toLocaleString()}원 · 등급 갱신까지 {daysUntilReset}일
               </div>
               {/* 이번 달 구매금액 + 다음 달 예상 등급 */}
-              <div className="text-xs text-blue-500 mb-2 flex items-center gap-1">
+              <div className="text-xs text-blue-500 mb-3 flex items-center gap-1">
                 <ShoppingBag className="w-3.5 h-3.5" />
-                이번 달 구매금액 {currentMonthData.currentMonthAmount.toLocaleString()}원 · 다음 달 예상 등급: <span className="font-semibold">{currentMonthData.nextGrade}</span>
+                이번 달 구매금액 {currentMonthAmt.toLocaleString()}원 · 다음 달 예상 등급: <span className="font-semibold">{currentMonthData.nextGrade}</span>
               </div>
+              {/* 프로그레스 바 — 이번 달 구매금액 기준 */}
               {nextLevel && nextThreshold && (
                 <div>
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
                     <span>{nextLevel} 달성까지</span>
-                    <span>{amountToNext === 0 ? '달성!' : `${amountToNext.toLocaleString()}원 남음`}</span>
+                    <span>{monthAmountToNext === 0 ? '달성!' : `${monthAmountToNext.toLocaleString()}원 남음`}</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
                     <div className="h-2 rounded-full transition-all" style={{ width: `${progressPct}%`, backgroundColor: COLORS[nextLevel] }} />
