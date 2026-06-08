@@ -495,6 +495,29 @@ app.get('/api/coupons/validate', async (req, res) => {
   } catch { res.status(200).json({ error: '쿠폰 기능 미지원' }); }
 });
 
+// ── 캠페인 팝업 조회 (Node.js 경로 — /api/campaigns는 nginx가 8080으로 라우팅하므로 별도 경로 사용)
+// Spring Boot GET /api/campaigns/popup?customerId={id} 응답을 정규화해서 반환
+app.get('/api/campaign-popup', async (req, res) => {
+  const { customerId } = req.query;
+  if (!customerId) return res.json({ show: false });
+  try {
+    const response = await axios.get(
+      `http://210.104.76.135:8080/api/campaigns/popup?customerId=${customerId}`,
+      { timeout: 3000 }
+    );
+    const data = response.data;
+    // Spring Boot 응답 정규화: id + popupMessage(또는 message) 있을 때만 show
+    const id      = data?.id      != null ? String(data.id)      : null;
+    const message = data?.popupMessage || data?.message          || null;
+    if (id && message) {
+      return res.json({ show: true, id, message });
+    }
+    res.json({ show: false });
+  } catch {
+    res.json({ show: false });
+  }
+});
+
 // ── 쿠폰 발급 프록시 (팀원 캠페인 API → localhost:8080) ─────────
 app.post('/api/coupons/issue-campaign', async (req, res) => {
   const { campaign_id, customer_id } = req.body;

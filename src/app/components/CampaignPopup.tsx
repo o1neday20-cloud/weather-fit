@@ -41,6 +41,8 @@ function sendAnonymousVisit(pageUrl: string) {
   }).catch(() => {});
 }
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 interface PopupState {
   show:       boolean;
   message:    string;
@@ -64,22 +66,33 @@ export default function CampaignPopup() {
       const customerId = localStorage.getItem('partnerCustomerId');
       if (!customerId) return;
 
-      fetch(`${API_BASE}/campaigns/popup-check/customer?customerId=${customerId}`)
+      // 신규 캠페인 팝업: /api/campaign-popup (Node.js 경로, 오늘 날짜 기반 dismiss 지원)
+      fetch(`${API_BASE}/campaign-popup?customerId=${customerId}`)
         .then(r => r.json())
         .then(data => {
-          if (!data?.showPopup) return;
-          const cid = data.campaignId ? String(data.campaignId) : null;
-          // campaignId별로 세션 내 재노출 방지
-          const sessionKey = cid ? `popup_closed_campaign_${cid}` : 'popup_closed_campaign_unknown';
-          if (sessionStorage.getItem(sessionKey)) return;
-          setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!', campaignId: cid });
+          if (!data?.show || !data?.id) return;
+          // 오늘 이미 "오늘 그만보기" 를 눌렀으면 스킵
+          const dismissKey = `campaign_dismiss_${data.id}`;
+          if (localStorage.getItem(dismissKey) === today()) return;
+          setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!', campaignId: data.id });
         })
-        .catch(() => {});
+        .catch(() => {
+          // 신규 API 실패 시 기존 popup-check 폴백
+          fetch(`${API_BASE}/campaigns/popup-check/customer?customerId=${customerId}`)
+            .then(r => r.json())
+            .then(data => {
+              if (!data?.showPopup) return;
+              const cid = data.campaignId ? String(data.campaignId) : null;
+              const sessionKey = cid ? `popup_closed_campaign_${cid}` : 'popup_closed_campaign_unknown';
+              if (sessionStorage.getItem(sessionKey)) return;
+              setPopup({ show: true, message: data.message || '특별 혜택을 확인하세요!', campaignId: cid });
+            })
+            .catch(() => {});
+        });
     } else {
-      // 비로그인 사용자: Fluentd 방문 로그 전송
+      // 비로그인 사용자: 방문 로그 전송
       sendAnonymousVisit(pageUrl);
 
-      // 닫기 이미 눌렀으면 팝업 생략
       if (localStorage.getItem('popup_closed') === 'true') return;
 
       const anonymousId = getAnonymousId();
@@ -87,11 +100,8 @@ export default function CampaignPopup() {
         .then(r => r.json())
         .then(data => {
           if (data?.showPopup) {
-            setPopup({ show: true, message: data.message || '회원가입하고 특별 혜택을 받아보세요!' });
-            // 팝업 노출 기록
-            fetch(`${API_BASE}/anonymous-users/${anonymousId}/popup-shown`, {
-              method: 'PATCH',
-            }).catch(() => {});
+            setPopup({ show: true, message: data.message || '회원가입하고 특별 혜택을 받아보세요!', campaignId: null });
+            fetch(`${API_BASE}/anonymous-users/${anonymousId}/popup-shown`, { method: 'PATCH' }).catch(() => {});
           }
         })
         .catch(() => {});
@@ -108,6 +118,14 @@ export default function CampaignPopup() {
       sessionStorage.setItem(sessionKey, 'true');
     } else {
       localStorage.setItem('popup_closed', 'true');
+    }
+    setPopup({ show: false, message: '', campaignId: null });
+  };
+
+  // "오늘 그만보기" — 오늘 날짜를 localStorage에 저장해 당일 재노출 차단
+  const handleDismissToday = () => {
+    if (popup.campaignId) {
+      localStorage.setItem(`campaign_dismiss_${popup.campaignId}`, today());
     }
     setPopup({ show: false, message: '', campaignId: null });
   };
@@ -134,6 +152,14 @@ export default function CampaignPopup() {
               className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
             >
               회원가입하기
+            </button>
+          )}
+          {isLoggedIn() && popup.campaignId && (
+            <button
+              onClick={handleDismissToday}
+              className="w-full py-3 bg-gray-800 text-white rounded-xl font-semibold hover:bg-gray-900 transition-colors"
+            >
+              오늘 그만보기
             </button>
           )}
           <button
