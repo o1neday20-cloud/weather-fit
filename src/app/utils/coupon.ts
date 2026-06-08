@@ -14,7 +14,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export function isCouponValid(c: CouponItem): boolean {
   const t = today();
-  return c.valid_from <= t && t <= c.valid_until;
+  return c.valid_from.slice(0, 10) <= t && t <= c.valid_until.slice(0, 10);
 }
 
 export function calcDiscount(coupon: CouponItem, orderAmt: number): number {
