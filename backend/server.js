@@ -168,15 +168,23 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 제한
   fileFilter: (_req, file, cb) => {
     cb(null, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype));
   },
 });
 
-app.post('/api/upload/wardrobe', upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: '파일 없음' });
-  res.json({ success: true, imageUrl: `/images/wardrobe/${req.file.filename}` });
+app.post('/api/upload/wardrobe', (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: '이미지 용량이 너무 큽니다. 5MB 이하 파일을 사용해주세요.' });
+      }
+      return res.status(400).json({ error: '업로드 실패' });
+    }
+    if (!req.file) return res.status(400).json({ error: '파일 없음' });
+    res.json({ success: true, imageUrl: `/images/wardrobe/${req.file.filename}` });
+  });
 });
 
 // ── DB 연결 ───────────────────────────────────────────────────

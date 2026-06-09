@@ -507,6 +507,13 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
     if (!file) return;
     setUploadError('');
 
+    // 프론트 사전 검사 — 5MB 초과 시 즉시 안내
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('이미지 용량이 너무 큽니다. 5MB 이하 파일을 사용해주세요.');
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const base64 = ev.target?.result as string;
@@ -742,6 +749,7 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
   const [imagePreview, setImagePreview] = useState<string>(item.image || '');
   const [imageUrl,     setImageUrl]     = useState<string>(item.image || '');
   const [uploading,    setUploading]    = useState(false);
+  const [uploadError,  setUploadError]  = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
   const SERVER_ORIGIN = API_BASE.replace(/\/api$/, '');
@@ -749,6 +757,15 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError('');
+
+    // 프론트 사전 검사 — 5MB 초과 시 즉시 안내
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('이미지 용량이 너무 큽니다. 5MB 이하 파일을 사용해주세요.');
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const base64 = ev.target?.result as string;
@@ -762,9 +779,16 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
           const data = await res.json();
           const url: string = data.imageUrl;
           setImageUrl(url.startsWith('http') ? url : `${SERVER_ORIGIN}${url}`);
+        } else if (res.status === 413) {
+          setUploadError('이미지 용량이 너무 큽니다. 5MB 이하 파일을 사용해주세요.');
+          setImagePreview('');
+        } else {
+          setUploadError('이미지 업로드에 실패했습니다. 다시 시도해주세요.');
+          setImagePreview('');
         }
       } catch {
-        // 업로드 실패 시 base64 미리보기로 저장됨
+        setUploadError('이미지 업로드에 실패했습니다. 다시 시도해주세요.');
+        setImagePreview('');
       } finally {
         setUploading(false);
       }
@@ -829,6 +853,9 @@ function EditItemModal({ item, onClose, onUpdate }: EditItemModalProps) {
               )}
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            {uploadError && (
+              <p className="text-xs text-red-500 mt-1.5">{uploadError}</p>
+            )}
           </div>
 
           {/* 이름 */}
