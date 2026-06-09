@@ -25,7 +25,7 @@ echo "[2/2] nginx 시작 중..."
 if pgrep -x nginx > /dev/null 2>&1; then
   echo "  ℹ️  nginx가 이미 실행 중입니다."
 else
-  nginx
+  sudo nginx
   if [ $? -eq 0 ]; then
     echo "  ✅ nginx 시작 완료"
   else

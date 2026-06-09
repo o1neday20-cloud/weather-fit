@@ -21,12 +21,12 @@ echo ""
 echo "[2/2] nginx 종료 중..."
 
 if pgrep -x nginx > /dev/null 2>&1; then
-  nginx -s stop
+  sudo nginx -s stop
   if [ $? -eq 0 ]; then
     echo "  ✅ nginx 종료 완료"
   else
     echo "  ❌ nginx 종료 실패 — 강제 종료 시도"
-    pkill -x nginx || true
+    sudo pkill -x nginx || true
   fi
 else
   echo "  ℹ️  nginx가 실행 중이 아닙니다."
