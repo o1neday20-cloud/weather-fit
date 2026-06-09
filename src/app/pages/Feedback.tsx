@@ -64,7 +64,7 @@ export default function Feedback() {
       weatherCondition:  lastWeather.condition    ?? '맑음',
       recommendedOutfit: outfitIds,
       feedback:          feedbackMap[rating],
-      regionName:        lastWeather.location?.split(' ')[0] ?? undefined,
+      regionName:        lastWeather.location?.startsWith('서울 기준') ? '서울특별시' : lastWeather.location?.split(' ')[0] ?? undefined,
     });
 
     setSubmitted(true);
