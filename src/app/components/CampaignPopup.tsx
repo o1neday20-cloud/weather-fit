@@ -72,10 +72,14 @@ export default function CampaignPopup() {
         .then(r => r.json())
         .then(data => {
           if (!data?.id || !data?.popupMessage) return;
+          const campaignId = String(data.id);
+          // 세션 내에서 이미 닫은 캠페인이면 스킵
+          const sessionKey = `popup_closed_campaign_${campaignId}`;
+          if (sessionStorage.getItem(sessionKey)) return;
           // 오늘 이미 "오늘 그만보기"를 눌렀으면 스킵 (계정별 구분)
-          const dismissKey = `campaign_dismiss_${data.id}_${customerId}`;
+          const dismissKey = `campaign_dismiss_${campaignId}_${customerId}`;
           if (localStorage.getItem(dismissKey) === today()) return;
-          setPopup({ show: true, message: data.popupMessage, campaignId: String(data.id) });
+          setPopup({ show: true, message: data.popupMessage, campaignId });
         })
         .catch(() => {});
     } else {
@@ -111,11 +115,12 @@ export default function CampaignPopup() {
     setPopup({ show: false, message: '', campaignId: null });
   };
 
-  // "오늘 그만보기" — 오늘 날짜를 localStorage에 저장해 당일 재노출 차단
+  // "오늘 그만보기" — localStorage에 오늘 날짜 저장(당일 재노출 차단) + sessionStorage로 세션 내 차단
   const handleDismissToday = () => {
     if (popup.campaignId) {
       const customerId = localStorage.getItem('partnerCustomerId') || 'guest';
       localStorage.setItem(`campaign_dismiss_${popup.campaignId}_${customerId}`, today());
+      sessionStorage.setItem(`popup_closed_campaign_${popup.campaignId}`, 'true');
     }
     setPopup({ show: false, message: '', campaignId: null });
   };
