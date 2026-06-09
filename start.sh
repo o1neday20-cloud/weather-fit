@@ -26,7 +26,7 @@ if pm2 describe weatherfit-api > /dev/null 2>&1; then
   pm2 restart weatherfit-api
   echo "  ✅ 백엔드 재시작 완료 (weatherfit-api)"
 else
-  pm2 start /home/ubuntu/weather-fit/ecosystem.config.js
+  pm2 start /home/ubuntu/weather-fit/ecosystem.config.cjs
   echo "  ✅ 백엔드 시작 완료 (weatherfit-api)"
 fi
 
