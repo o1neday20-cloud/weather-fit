@@ -283,14 +283,7 @@ export default function Auth() {
       }).catch(() => {});
       navigate(redirectTo);
     } catch {
-      try {
-        loginLocally(loginForm.email, loginForm.password);
-        const uid = localStorage.getItem('userId') || '';
-        mergeGuestWishlist(uid);
-        mergeGuestWardrobe(uid);
-        navigate(redirectTo);
-      }
-      catch (err: any) { setError(err.message || '로그인에 실패했습니다'); }
+      setError('서버 오류로 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
     } finally { setLoading(false); }
   };
 
@@ -333,13 +326,7 @@ export default function Auth() {
       callPartnerSignup(regForm); // 팀원 서버 연동 (fire-and-forget)
       navigate('/onboarding');
     } catch {
-      try {
-        registerLocally(regForm);
-        const uid = localStorage.getItem('userId') || '';
-        mergeGuestWishlist(uid);
-        mergeGuestWardrobe(uid);
-        navigate('/onboarding');
-      } catch (err: any) { setError(err.message || '회원가입에 실패했습니다'); }
+      setError('서버 오류로 가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
     } finally { setLoading(false); }
   };
 
