@@ -114,6 +114,8 @@ export default function MyPage() {
     if (!userId) return;
     setSaving(true);
     try {
+      // 모든 설정(activity_level, preferred_style, cold_sensitivity, 동의 항목)을
+      // Node.js PATCH /api/customers/:id 단일 경로로 전송 — DB 저장 + Kafka customer_update 발행
       const patchRes = await fetch(`${API_BASE}/customers/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

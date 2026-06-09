@@ -58,7 +58,7 @@ export default function Feedback() {
     // temperature_feedback 테이블 전송 → 관리자 온도 피드백 분석용
     await Logger.logFeedback({
       actualTemp:        lastWeather.temperature  ?? 0,
-      feelsLikeTemp:     lastWeather.feelsLike    ?? 0,
+      feelsLikeTemp:     lastWeather.feelsLikeTemp ?? lastWeather.feelsLike ?? lastWeather.temperature ?? 0,
       humidity:          lastWeather.humidity     ?? 0,
       windSpeed:         lastWeather.windSpeed    ?? 0,
       weatherCondition:  lastWeather.condition    ?? '맑음',

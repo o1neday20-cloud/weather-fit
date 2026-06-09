@@ -28,6 +28,12 @@ export default function Checkout() {
 
   const [couponInfo, setCouponInfo] = useState<(CouponItem & { discountAmt: number }) | null>(null);
   const [myCoupons, setMyCoupons]   = useState<CouponItem[]>([]);
+  const [couponToast, setCouponToast] = useState<string>('');
+
+  const showCouponToast = (msg: string) => {
+    setCouponToast(msg);
+    setTimeout(() => setCouponToast(''), 3000);
+  };
 
   // 이전 배송지
   const [addressHistory, setAddressHistory] = useState<SavedAddress[]>([]);
@@ -363,6 +369,13 @@ export default function Checkout() {
               </div>
             </div>
 
+            {/* 쿠폰 토스트 */}
+            {couponToast && (
+              <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white text-sm px-4 py-3 rounded-xl shadow-lg max-w-xs text-center">
+                {couponToast}
+              </div>
+            )}
+
             {/* 쿠폰 적용 */}
             <div className="bg-white rounded-xl p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
@@ -397,8 +410,15 @@ export default function Checkout() {
                       <button
                         key={c.coupon_id}
                         type="button"
-                        disabled={isDisabled}
-                        onClick={() => handleSelectCoupon(c)}
+                        onClick={() => {
+                          if (isDisabled) {
+                            if (c.min_order_amt > 0 && getTotalPrice() < c.min_order_amt) {
+                              showCouponToast(`최소 주문금액 ${c.min_order_amt.toLocaleString()}원 이상 구매 시 사용 가능합니다`);
+                            }
+                            return;
+                          }
+                          handleSelectCoupon(c);
+                        }}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${
                           isSelected
                             ? 'border-blue-500 bg-blue-50'

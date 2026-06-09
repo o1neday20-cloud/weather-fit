@@ -496,6 +496,7 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUrl, setImageUrl] = useState<string>('');   // 서버에 저장된 실제 경로
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
@@ -504,6 +505,7 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError('');
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -518,9 +520,16 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
           const data = await res.json();
           const url: string = data.imageUrl;
           setImageUrl(url.startsWith('http') ? url : `${SERVER_ORIGIN}${url}`);
+        } else if (res.status === 413) {
+          setUploadError('이미지 용량이 너무 큽니다. 5MB 이하 파일을 사용해주세요.');
+          setImagePreview('');
+        } else {
+          setUploadError('이미지 업로드에 실패했습니다. 다시 시도해주세요.');
+          setImagePreview('');
         }
       } catch {
-        // 업로드 실패 시 base64 미리보기로 저장됨
+        setUploadError('이미지 업로드에 실패했습니다. 다시 시도해주세요.');
+        setImagePreview('');
       } finally {
         setUploading(false);
       }
@@ -591,6 +600,11 @@ function AddItemModal({ onClose, onAdd }: AddItemModalProps) {
               className="hidden"
               onChange={handleFileChange}
             />
+            {uploadError ? (
+              <p className="text-xs text-red-500 mt-1.5">{uploadError}</p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1.5">사진을 선택하지 않으면 카테고리 기본 이미지가 사용됩니다.</p>
+            )}
           </div>
 
           {/* 이름 */}
