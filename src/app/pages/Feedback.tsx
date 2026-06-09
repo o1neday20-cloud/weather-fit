@@ -38,8 +38,10 @@ export default function Feedback() {
       hot:     '덥다',
     };
 
+    const feedbackKafkaMap: Record<string, string> = { cold: 'COLD', perfect: 'PERFECT', hot: 'HOT' };
     const feedbackData = {
       rating,
+      feedback: feedbackKafkaMap[rating] ?? rating,
       timestamp: new Date().toISOString(),
       outfitStyles,
     };

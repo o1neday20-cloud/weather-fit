@@ -136,7 +136,7 @@ export default function Wardrobe() {
     const updated = [...wardrobe, item];
     setWardrobe(updated);
     localStorage.setItem(wardrobeKey(), JSON.stringify(updated));
-    Logger.log('item_added', { itemName: item.name, category: item.category });
+    Logger.log('item_added', { itemName: item.name, category: item.category, style: item.style });
     setShowAddModal(false);
 
     // 백엔드 동기화 (실패해도 localStorage는 이미 저장됨)
