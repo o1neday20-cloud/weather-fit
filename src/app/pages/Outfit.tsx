@@ -57,7 +57,10 @@ export default function Outfit() {
           // API 실패 시 빈 배열 유지 (mockProducts 폴백 제거)
         }
       }
-      const shopFallback = shopProducts;
+      // 악세서리는 코디 추천에서 제외
+      const shopFallback = shopProducts.filter(
+        (p: any) => (p.category || '').toLowerCase() !== 'accessory'
+      );
 
       // 날씨 API: 3초 내 응답 없으면 캐시 또는 기본값으로 폴백
       const cachedWeather = localStorage.getItem('lastWeather');
@@ -88,7 +91,11 @@ export default function Outfit() {
 
       // wardrobeKey()로 옷장 데이터 읽기
       const wardrobeString = localStorage.getItem(wardrobeKey());
-      const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
+      const wardrobeRaw: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
+      // 악세서리는 코디 추천에서 제외
+      const wardrobe: ClothingItemType[] = wardrobeRaw.filter(
+        (w: any) => (w.category || '').toLowerCase() !== 'accessory'
+      );
 
       const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, seed, shopFallback);
       setRecommendedOutfit(outfitResult.items);

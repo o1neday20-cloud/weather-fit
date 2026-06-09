@@ -117,8 +117,6 @@ export default function Checkout() {
       try {
         const wardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
         submitItems.forEach(item => {
-          // 악세서리는 옷장에 추가하지 않음
-          if ((item.product.category || '').toLowerCase() === 'accessory') return;
           const baseId = item.product.id;
           const color = item.selectedColor?.hex || item.product.color;
           const colorName = item.selectedColor?.name || '';
@@ -193,8 +191,6 @@ export default function Checkout() {
       const partnerColors: any[] = JSON.parse(localStorage.getItem('partnerColors') || '[]');
       const latestWardrobe: any[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
       for (const item of submitItems) {
-        // 악세서리는 옷장에 추가하지 않음
-        if ((item.product.category || '').toLowerCase() === 'accessory') continue;
         const colorHex = item.selectedColor?.hex || item.product.color;
         // 로컬 업데이트 이후 옷장 상태 기준으로 동일 상품 + 동일 색상 체크
         const existingItem = latestWardrobe.find((w: any) => w.productId === item.product.id || w.id === item.product.id);
