@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, Link, useLocation } from 'react-router';
 import Navigation from '../components/Navigation';
 import { Logger } from '../utils/logger';
 import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag, Package } from 'lucide-react';
@@ -15,6 +15,7 @@ const MEMBERSHIP_INFO: Record<string, { label: string; color: string; nextAt: nu
 
 export default function MyPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -106,7 +107,7 @@ export default function MyPage() {
       setIsLoggedIn(false);
     }
     Logger.log('page_view', { page: 'mypage' });
-  }, []);
+  }, [location.pathname]);
 
   const handleSavePrefs = async () => {
     const userId = localStorage.getItem('userId');
