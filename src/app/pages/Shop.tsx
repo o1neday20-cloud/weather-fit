@@ -226,6 +226,7 @@ export default function Shop() {
     { id: 'outer', label: '아우터' },
     { id: 'top', label: '상의' },
     { id: 'bottom', label: '하의' },
+    { id: 'accessory', label: '악세서리' },
   ];
 
   const handleAddToCart = async (product: Product) => {
