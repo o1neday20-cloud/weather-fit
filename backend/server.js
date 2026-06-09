@@ -417,6 +417,7 @@ app.get('/api/membership/current-month', async (req, res) => {
                     : currentMonthAmount >= 500000   ? '골드'
                     : currentMonthAmount >= 200000   ? '실버'
                     :                                  '일반';
+    res.set('Cache-Control', 'no-store');
     res.json({ currentMonthAmount, nextGrade });
   } catch (err) {
     console.error('[membership/current-month]', err.message);

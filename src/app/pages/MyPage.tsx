@@ -90,7 +90,7 @@ export default function MyPage() {
       // 이번 달 구매금액 + 다음 달 예상 등급
       const partnerCid = localStorage.getItem('partnerCustomerId');
       if (partnerCid) {
-        fetch(`${API_BASE}/membership/current-month?customerId=${partnerCid}`)
+        fetch(`${API_BASE}/membership/current-month?customerId=${partnerCid}&_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } })
           .then(r => r.ok ? r.json() : Promise.reject())
           .then(d => setCurrentMonthData({ currentMonthAmount: d.currentMonthAmount ?? 0, nextGrade: d.nextGrade ?? '일반' }))
           .catch(() => {});
