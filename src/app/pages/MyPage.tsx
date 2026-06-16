@@ -7,9 +7,9 @@ import { Heart, Star, LogOut, ChevronRight, User, Ticket, LogIn, ShoppingBag, Pa
 const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
 
 const MEMBERSHIP_INFO: Record<string, { label: string; color: string; nextAt: number | null; benefit: string }> = {
-  BASIC:  { label: 'BASIC',  color: '#9CA3AF', nextAt: 200000,  benefit: '일반 등급 할인 쿠폰 증정' },
-  SILVER: { label: 'SILVER', color: '#94A3B8', nextAt: 500000,  benefit: '실버 등급 할인 쿠폰 증정' },
-  GOLD:   { label: 'GOLD',   color: '#F59E0B', nextAt: 1000000, benefit: '골드 등급 할인 쿠폰 증정' },
+  BASIC:  { label: 'BASIC',  color: '#9CA3AF', nextAt: 100000,  benefit: '일반 등급 할인 쿠폰 증정' },
+  SILVER: { label: 'SILVER', color: '#94A3B8', nextAt: 300000,  benefit: '실버 등급 할인 쿠폰 증정' },
+  GOLD:   { label: 'GOLD',   color: '#F59E0B', nextAt: 500000,  benefit: '골드 등급 할인 쿠폰 증정' },
   VIP:    { label: 'VIP',    color: '#8B5CF6', nextAt: null,     benefit: 'VIP 등급 할인 쿠폰 증정' },
 };
 
@@ -63,9 +63,9 @@ export default function MyPage() {
         .then(data => {
           // 전월 구매금액 기반 등급 계산
           const amount = data.membership_amount ?? 0;
-          const computedLevel = amount >= 1000000 ? 'VIP'
-            : amount >= 500000 ? 'GOLD'
-            : amount >= 200000 ? 'SILVER'
+          const computedLevel = amount >= 500000 ? 'VIP'
+            : amount >= 300000 ? 'GOLD'
+            : amount >= 100000 ? 'SILVER'
             : 'BASIC';
           setMembershipLevel(computedLevel);
           setMembershipData({
@@ -252,7 +252,7 @@ export default function MyPage() {
           const level  = membershipLevel;
           const amount = membershipData.amount;
           const LEVELS = ['BASIC', 'SILVER', 'GOLD', 'VIP'];
-          const THRESH: Record<string, number> = { BASIC: 0, SILVER: 200000, GOLD: 500000, VIP: 1000000 };
+          const THRESH: Record<string, number> = { BASIC: 0, SILVER: 100000, GOLD: 300000, VIP: 500000 };
           // 등급 리셋까지 남은 일수 (next_update 기준)
           const daysUntilReset = membershipData.next_update
             ? Math.max(0, Math.round((new Date(membershipData.next_update).getTime() - Date.now()) / 86400000))
@@ -261,9 +261,9 @@ export default function MyPage() {
           // ── 이번 달 구매금액 기준 프로그레스 바 ─────────────
           const currentMonthAmt = currentMonthData.currentMonthAmount;
           // 이번 달 금액으로 현재 위치 등급 계산
-          const thisMonthLevel = currentMonthAmt >= 1000000 ? 'VIP'
-            : currentMonthAmt >= 500000 ? 'GOLD'
-            : currentMonthAmt >= 200000 ? 'SILVER'
+          const thisMonthLevel = currentMonthAmt >= 500000 ? 'VIP'
+            : currentMonthAmt >= 300000 ? 'GOLD'
+            : currentMonthAmt >= 100000 ? 'SILVER'
             : 'BASIC';
           const thisMonthIdx   = LEVELS.indexOf(thisMonthLevel);
           const nextLevel      = thisMonthIdx < LEVELS.length - 1 ? LEVELS[thisMonthIdx + 1] : null;

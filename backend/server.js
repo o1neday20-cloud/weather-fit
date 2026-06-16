@@ -383,9 +383,9 @@ app.get('/api/customers/:id', async (req, res) => {
 
     const LEVELS = [
       { name: 'BASIC',  min: 0       },
-      { name: 'SILVER', min: 200000  },
-      { name: 'GOLD',   min: 500000  },
-      { name: 'VIP',    min: 1000000 },
+      { name: 'SILVER', min: 100000  },
+      { name: 'GOLD',   min: 300000  },
+      { name: 'VIP',    min: 500000  },
     ];
     let currentLevel = LEVELS[0];
     for (const l of LEVELS) {
@@ -421,10 +421,10 @@ app.get('/api/membership/current-month', async (req, res) => {
       [Number(customerId), monthStart]
     );
     const currentMonthAmount = Number(row.total);
-    const nextGrade = currentMonthAmount >= 1000000 ? 'VIP'
-                    : currentMonthAmount >= 500000   ? '골드'
-                    : currentMonthAmount >= 200000   ? '실버'
-                    :                                  '일반';
+    const nextGrade = currentMonthAmount >= 500000 ? 'VIP'
+                    : currentMonthAmount >= 300000  ? '골드'
+                    : currentMonthAmount >= 100000  ? '실버'
+                    :                                 '일반';
     res.set('Cache-Control', 'no-store');
     res.json({ currentMonthAmount, nextGrade });
   } catch (err) {
@@ -1181,10 +1181,10 @@ setInterval(async () => {
         [c.id, prevStart, prevEnd]
       );
       const amt = Number(row.total);
-      const level = amt >= 1000000 ? 'VIP'
-                  : amt >= 500000  ? 'GOLD'
-                  : amt >= 200000  ? 'SILVER'
-                  :                  'BASIC';
+      const level = amt >= 500000 ? 'VIP'
+                  : amt >= 300000 ? 'GOLD'
+                  : amt >= 100000 ? 'SILVER'
+                  :                 'BASIC';
       await pool.execute(
         'UPDATE customer SET membership_level = ? WHERE id = ?',
         [level, c.id]
