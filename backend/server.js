@@ -650,10 +650,11 @@ app.get('/api/coupons/my/:customerId', async (req, res) => {
               cc.expired_at         AS valid_until
        FROM customer_coupon cc
        JOIN coupon c ON cc.coupon_id = c.id
-       WHERE cc.customer_id = ? AND cc.status = 'ISSUED'
-         AND cc.expired_at >= CURRENT_DATE
-         AND c.status = 'ACTIVE'
-       ORDER BY cc.expired_at ASC`,
+       WHERE cc.customer_id = ?
+         AND UPPER(cc.status) = 'ISSUED'
+         AND (cc.expired_at IS NULL OR cc.expired_at >= CURRENT_DATE)
+         AND UPPER(c.status) = 'ACTIVE'
+       ORDER BY cc.expired_at IS NULL ASC, cc.expired_at ASC`,
       [req.params.customerId]
     );
     const result = rows.map(r => ({
