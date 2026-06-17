@@ -75,18 +75,22 @@ export default function Home() {
       (w: any) => (w.category || '').toLowerCase() !== 'accessory'
     );
 
-    // 3가지 코디 세트 생성 — 서로 다른 seed로 다양한 조합 추출
+    // 3가지 코디 세트 생성 — 앞 세트에서 쓴 아이템을 다음 세트 후보에서 제외
     const seed = Date.now();
     const STYLE_META = [
       { label: '캐주얼', emoji: '👕' },
       { label: '포멀',   emoji: '👔' },
       { label: '스포티', emoji: '🏃' },
     ];
-    // 각 seed를 충분히 다르게 분산시켜 shuffle 결과 변화 극대화
-    const seeds = [seed, seed + 99991, seed + 199999];
-    const sets: OutfitSet[] = seeds.map((s, i) => {
-      const result = recommendOutfit(tempPrediction.perceived, wardrobe, s, shopFallback);
-      return { ...result, ...STYLE_META[i] };
+    const excludedIds = new Set<string>();
+    const sets: OutfitSet[] = STYLE_META.map(({ label, emoji }, i) => {
+      const availShop     = shopFallback.filter(p => !excludedIds.has(p.id));
+      const availWardrobe = wardrobe.filter(w => !excludedIds.has(w.id));
+      const result = recommendOutfit(
+        tempPrediction.perceived, availWardrobe, seed + i * 99991, availShop
+      );
+      result.items.forEach(item => excludedIds.add(item.id));
+      return { ...result, label, emoji };
     });
     setOutfitSets(sets);
 
