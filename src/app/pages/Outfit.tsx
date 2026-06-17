@@ -7,8 +7,12 @@ import { predictFeelTemperature, recommendOutfit, ClothingItem as ClothingItemTy
 import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { Sparkles, RefreshCw, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import { mockProducts } from '../utils/products';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
+
+// 로컬 products.ts 기준 imageUrl 조회 (DB image_url 오류 방지)
+const LOCAL_IMAGE_MAP = new Map(mockProducts.map(p => [p.id, p.imageUrl]));
 
 interface OutfitSet {
   items: ClothingItemType[];
@@ -27,7 +31,8 @@ function mapApiProduct(row: any): ClothingItemType & { imageUrl?: string } {
     color:    '#9CA3AF',
     style:    (row.style || 'casual').toLowerCase() as ClothingItemType['style'],
     isOwned:  false,
-    imageUrl: row.image_url || undefined,
+    // 로컬 이미지 우선 (DB image_url이 잘못된 경우 방지)
+    imageUrl: LOCAL_IMAGE_MAP.get(row.product_id ?? `prod_${row.id}`) || row.image_url || undefined,
   };
 }
 
