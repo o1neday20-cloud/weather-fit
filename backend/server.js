@@ -653,7 +653,7 @@ app.get('/api/coupons/my/:customerId', async (req, res) => {
        WHERE cc.customer_id = ?
          AND UPPER(cc.status) = 'ISSUED'
          AND (cc.expired_at IS NULL OR cc.expired_at >= CURRENT_DATE)
-         AND UPPER(c.status) = 'ACTIVE'
+         AND UPPER(c.status) NOT IN ('INACTIVE', 'DELETED', 'DISABLED')
        ORDER BY cc.expired_at IS NULL ASC, cc.expired_at ASC`,
       [req.params.customerId]
     );
