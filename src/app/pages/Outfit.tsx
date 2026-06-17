@@ -75,9 +75,10 @@ export default function Outfit() {
           // API 실패 시 빈 배열 유지
         }
       }
-      // 악세서리는 코디 추천에서 제외
+      // 악세서리 및 products.ts에 없는 상품(이미지 오류 가능성) 제외
       const shopFallback = shopProducts.filter(
         (p: any) => (p.category || '').toLowerCase() !== 'accessory'
+                 && LOCAL_IMAGE_MAP.has(p.id)
       );
 
       // 날씨 API (3초 타임아웃 → 캐시 폴백)

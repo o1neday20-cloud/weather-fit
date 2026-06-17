@@ -68,6 +68,7 @@ export default function Weather() {
           const rows = await res.json();
           const dbProducts = rows
             .filter((row: any) => (row.category || '').toLowerCase() !== 'accessory')
+            .filter((row: any) => LOCAL_IMAGE_MAP.has(row.product_id ?? `prod_${row.id}`))
             .map((row: any) => ({
               id:       row.product_id ?? `prod_${row.id}`,
               name:     row.name || row.product_name || '',
