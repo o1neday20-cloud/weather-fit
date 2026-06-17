@@ -15,6 +15,20 @@ import { Logger } from '../utils/logger';
 import { wardrobeKey } from '../utils/storage';
 import { MapPin, Search, Cloud, CloudRain, CloudSnow, CloudFog, Sun, ChevronRight } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://210.104.76.135/api';
+
+// 로컬 products.ts 기준 imageUrl 조회 (DB image_url 오류 방지)
+const LOCAL_IMAGE_MAP = new Map(mockProducts.map(p => [p.id, p.imageUrl]));
+
+/** 날짜 문자열 → 잘 분산된 32-bit hash seed (FNV-1a) */
+function hashDate(dateStr: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < dateStr.length; i++) {
+    h = Math.imul(h ^ dateStr.charCodeAt(i), 16777619);
+  }
+  return h >>> 0;
+}
+
 export default function Weather() {
   const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(null);
   const [weeklyForecast, setWeeklyForecast] = useState<WeeklyForecast[]>([]);
@@ -23,10 +37,11 @@ export default function Weather() {
   const [showSearch, setShowSearch] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDayOutfit, setSelectedDayOutfit] = useState<ClothingItemType[]>([]);
+  // 날짜별 사전 생성 코디 (key: 날짜 문자열)
+  const [weeklyOutfits, setWeeklyOutfits] = useState<Map<string, ClothingItemType[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
 
-  // 초기 데이터 로드
   useEffect(() => {
     loadWeatherData();
     Logger.log('page_view', { page: 'weather' });
@@ -35,21 +50,89 @@ export default function Weather() {
   const loadWeatherData = async (location?: string) => {
     setLoading(true);
     try {
-      // 단기예보(현재)와 중기예보(주간)를 병렬로 호출하여 속도 개선
       const [weather, forecast] = await Promise.all([
         getCurrentWeather(location),
-        getWeeklyForecast(location)
+        getWeeklyForecast(location),
       ]);
 
       setCurrentWeather(weather);
       setWeeklyForecast(forecast);
 
-      // 데이터 로드 후 자동으로 오늘 날짜 선택 (추천 코디 보여주기 위함)
+      // ── DB 상품 조회 (코디 추천용, 실패 시 mockProducts 폴백) ──
+      let shopFallback: ClothingItemType[] = mockProducts.filter(
+        p => (p.category || '').toLowerCase() !== 'accessory'
+      );
+      try {
+        const res = await fetch(`${API_BASE}/products`);
+        if (res.ok) {
+          const rows = await res.json();
+          const dbProducts = rows
+            .filter((row: any) => (row.category || '').toLowerCase() !== 'accessory')
+            .map((row: any) => ({
+              id:       row.product_id ?? `prod_${row.id}`,
+              name:     row.name || row.product_name || '',
+              category: (row.category || 'top').toLowerCase() as ClothingItemType['category'],
+              warmth:   Number(row.warmth) || 1,
+              color:    '#9CA3AF',
+              style:    (row.style || 'casual').toLowerCase() as ClothingItemType['style'],
+              isOwned:  false,
+              imageUrl: LOCAL_IMAGE_MAP.get(row.product_id ?? `prod_${row.id}`) || row.image_url || undefined,
+            }));
+          if (dbProducts.length > 0) shopFallback = dbProducts;
+        }
+      } catch { /* API 실패 시 mockProducts 사용 */ }
+
+      // ── 사용자 설정 / 옷장 ──
+      const userPrefString = localStorage.getItem('userPreference');
+      const userPref: UserPreference = userPrefString
+        ? JSON.parse(userPrefString)
+        : { coldSensitivity: 0, activityLevel: 'medium', style: 'casual' };
+
+      const wardrobeRaw: ClothingItemType[] = JSON.parse(localStorage.getItem(wardrobeKey()) || '[]');
+      const wardrobe = wardrobeRaw.filter(
+        (w: any) => (w.category || '').toLowerCase() !== 'accessory'
+      );
+
+      // ── 7일치 코디 사전 생성 (앞 날짜에서 쓴 아이템을 다음 날짜에서 제외) ──
+      const excludedIds = new Set<string>();
+      const outfitMap = new Map<string, ClothingItemType[]>();
+
+      for (const day of forecast) {
+        const dayWeather: WeatherData = {
+          temperature: day.temperature.max,
+          humidity:    day.humidity,
+          windSpeed:   day.windSpeed,
+          condition:   day.condition,
+          location:    weather.location,
+          date:        day.date,
+        };
+        const tempPrediction = predictFeelTemperature(dayWeather, userPref);
+        const availWardrobe  = wardrobe.filter(w => !excludedIds.has(w.id));
+        const availShop      = shopFallback.filter(p => !excludedIds.has(p.id));
+
+        // 풀이 소진되면 전체 재사용 (7일 × 2~3벌 = 최대 21개 필요)
+        const finalWardrobe = availWardrobe.length > 0 ? availWardrobe : wardrobe;
+        const finalShop     = availShop.length > 0     ? availShop     : shopFallback;
+
+        const result = recommendOutfit(
+          tempPrediction.perceived,
+          finalWardrobe,
+          hashDate(day.date),
+          finalShop,
+        );
+        result.items.forEach(item => excludedIds.add(item.id));
+        outfitMap.set(day.date, result.items);
+      }
+
+      setWeeklyOutfits(outfitMap);
+
+      // 첫 번째 날짜 자동 선택
       if (forecast.length > 0) {
-        handleDateSelect(forecast[0]);
+        setSelectedDate(forecast[0].date);
+        setSelectedDayOutfit(outfitMap.get(forecast[0].date) || []);
       }
     } catch (error) {
-      console.error("데이터 로드 실패:", error);
+      console.error('데이터 로드 실패:', error);
     } finally {
       setLoading(false);
     }
@@ -77,43 +160,22 @@ export default function Weather() {
     loadWeatherData(location);
   };
 
-  const handleDateSelect = async (forecast: WeeklyForecast) => {
+  const handleDateSelect = (forecast: WeeklyForecast) => {
     setSelectedDate(forecast.date);
-
-    const userPrefString = localStorage.getItem('userPreference');
-    const userPref: UserPreference = userPrefString
-      ? JSON.parse(userPrefString)
-      : { coldSensitivity: 0, activityLevel: 'medium', style: 'casual' };
-
-    const weatherData: WeatherData = {
-      temperature: forecast.temperature.max,
-      humidity: forecast.humidity,
-      windSpeed: forecast.windSpeed,
-      condition: forecast.condition,
-      location: currentWeather?.location || '',
-      date: forecast.date,
-    };
-
-    const tempPrediction = predictFeelTemperature(weatherData, userPref);
-    const wardrobeString = localStorage.getItem(wardrobeKey());
-    const wardrobe: ClothingItemType[] = wardrobeString ? JSON.parse(wardrobeString) : [];
-
-    const outfitResult = recommendOutfit(tempPrediction.perceived, wardrobe, forecast.date.split('-').join('') | 0, mockProducts);
-    setSelectedDayOutfit(outfitResult.items);
+    setSelectedDayOutfit(weeklyOutfits.get(forecast.date) || []);
 
     Logger.log('forecast_selected', {
-      date: forecast.date,
+      date:        forecast.date,
       temperature: forecast.temperature.max,
-      feelTemperature: tempPrediction.perceived,
     });
   };
 
   const getWeatherIcon = (condition: string) => {
-    if (condition.includes('비')) return <CloudRain className="w-6 h-6 text-blue-500" />;
-    if (condition.includes('눈')) return <CloudSnow className="w-6 h-6 text-blue-300" />;
+    if (condition.includes('비'))               return <CloudRain className="w-6 h-6 text-blue-500" />;
+    if (condition.includes('눈'))               return <CloudSnow className="w-6 h-6 text-blue-300" />;
     if (condition.includes('흐림') || condition.includes('구름')) return <Cloud className="w-6 h-6 text-gray-400" />;
-    if (condition.includes('안개')) return <CloudFog className="w-6 h-6 text-gray-500" />;
-    if (condition.includes('맑음')) return <Sun className="w-6 h-6 text-yellow-500" />;
+    if (condition.includes('안개'))             return <CloudFog className="w-6 h-6 text-gray-500" />;
+    if (condition.includes('맑음'))             return <Sun className="w-6 h-6 text-yellow-500" />;
     return <Cloud className="w-6 h-6 text-gray-400" />;
   };
 
@@ -131,6 +193,7 @@ export default function Weather() {
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="max-w-screen-xl mx-auto px-4 py-6">
+
         {/* 헤더 */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">날씨 정보</h1>
@@ -150,7 +213,7 @@ export default function Weather() {
               onClick={() => {
                 const next = !showSearch;
                 setShowSearch(next);
-                if (next) handleSearch(''); // 열리면 기본 인기 지역 즉시 표시
+                if (next) handleSearch('');
               }}
               className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 text-sm font-medium transition-colors"
             >
@@ -178,7 +241,6 @@ export default function Weather() {
                 )}
               </div>
 
-              {/* 검색 결과 드롭다운 */}
               <div className="mt-2 max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
                 {searchLoading ? (
                   <div className="px-4 py-3 text-sm text-gray-400 text-center">검색 중...</div>
@@ -235,7 +297,7 @@ export default function Weather() {
           </div>
         )}
 
-        {/* 주간 예보 섹션 */}
+        {/* 주간 예보 */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-900">주간 예보</h2>
@@ -248,12 +310,16 @@ export default function Weather() {
                 <button
                   key={forecast.date}
                   onClick={() => handleDateSelect(forecast)}
-                  className={`w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex items-center justify-between border ${selectedDate === forecast.date ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-100'
-                    }`}
+                  className={`w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all flex items-center justify-between border ${
+                    selectedDate === forecast.date ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-100'
+                  }`}
                 >
                   <div className="flex items-center gap-4">
                     <div className="text-center min-w-[50px] border-r border-gray-100 pr-3">
-                      <div className={`text-sm font-bold ${forecast.dayOfWeek === '일' ? 'text-red-500' : forecast.dayOfWeek === '토' ? 'text-blue-500' : 'text-gray-700'}`}>
+                      <div className={`text-sm font-bold ${
+                        forecast.dayOfWeek === '일' ? 'text-red-500' :
+                        forecast.dayOfWeek === '토' ? 'text-blue-500' : 'text-gray-700'
+                      }`}>
                         {index === 0 ? '오늘' : forecast.dayOfWeek}
                       </div>
                       <div className="text-[10px] text-gray-400">
@@ -272,7 +338,9 @@ export default function Weather() {
                       <div className="text-xs text-gray-400">최저 <span className="text-blue-500 font-medium">{forecast.temperature.min}°</span></div>
                       <div className="text-xs text-gray-400">최고 <span className="text-red-500 font-medium">{forecast.temperature.max}°</span></div>
                     </div>
-                    <ChevronRight className={`w-4 h-4 transition-transform ${selectedDate === forecast.date ? 'rotate-90 text-blue-500' : 'text-gray-300'}`} />
+                    <ChevronRight className={`w-4 h-4 transition-transform ${
+                      selectedDate === forecast.date ? 'rotate-90 text-blue-500' : 'text-gray-300'
+                    }`} />
                   </div>
                 </button>
               ))
@@ -289,7 +357,9 @@ export default function Weather() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-50 animate-in fade-in zoom-in-95 duration-300">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">
-                {selectedDate === weeklyForecast[0]?.date ? '오늘' : `${new Date(selectedDate).getMonth() + 1}월 ${new Date(selectedDate).getDate()}일`} 추천 코디
+                {selectedDate === weeklyForecast[0]?.date
+                  ? '오늘'
+                  : `${new Date(selectedDate).getMonth() + 1}월 ${new Date(selectedDate).getDate()}일`} 추천 코디
               </h2>
               <div className="px-2 py-1 bg-blue-50 rounded text-[10px] text-blue-600 font-bold">AI RECOMMEND</div>
             </div>
